@@ -8,6 +8,7 @@
 #                                    reduce number of trials from 1000 to 200
 # 06-Nov-22    Michael Nunez    Smaller plot of a subset of the parameters for SyG2023 application
 # 03-Mar-23    Michael Nunez     Converted for new version of BayesFlow
+# 06-Mar-23    Michael Nunez            Reinstate use of numba (otherwise too slow)
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -122,17 +123,6 @@ def prior_N(n_min=60, n_max=300):
 
 
 def draw_prior():
-    """
-    Samples from the prior 'batch_size' times.
-    ----------
-
-    Arguments:
-    batch_size : int -- the number of samples to draw from the prior
-    ----------
-
-    Output:
-    theta : np.ndarray of shape (batch_size, theta_dim) -- the samples batch of parameters
-    """
 
     # Prior ranges for the simulator
     # mu_drift ~ U(-4.0, 4.0)
@@ -255,9 +245,6 @@ amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 # If the checkpoint path does not exist, create it
 checkpoint_path = f"checkpoint/{model_name}"
-# if not os.path.exists("checkpoint"):
-#     print('Making folder checkpoint')
-#     os.makedirs('checkpoint')
 
 # We need to pass the custom configurator here
 trainer = bf.trainers.Trainer(
@@ -279,7 +266,7 @@ num_val = 300
 val_sims = generative_model(num_val)
 
 # Experience-replay training
-losses = trainer.train_experience_replay(epochs=200,
+losses = trainer.train_experience_replay(epochs=500,
                                              batch_size=32,
                                              iterations_per_epoch=1000,
                                              validation_sims=val_sims)

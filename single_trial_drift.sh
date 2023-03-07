@@ -3,11 +3,10 @@
 #SBATCH -p gpu
 #SBATCH --gpus-per-node=1
 #SBATCH -n 1
-#SBATCH -t 4:00:00
- 
+#SBATCH -t 8:00:00
 
 #To run on Senllius use:
-#dos2unix bayesflow_job.sh && sbatch bayesflow_job.sh
+#dos2unix single_trial_drift.sh && sbatch single_trial_drift.sh
 
 #Loading modules
 module load 2022
@@ -32,8 +31,8 @@ cd "$TMPDIR"/bayesflow_nddms
 ls
 
 #Execute the Python program
-python single_trial_drift_dc.py
+python single_trial_drift.py
  
 #Copy output directories from scratch to home
-cp -r recovery_plots/single_trial_drift_dc/* $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc/
-cp -r checkpoint/single_trial_drift_dc/* $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc/
+cp -r recovery_plots/* $HOME/bayesflow_nddms/recovery_plots/
+cp -r checkpoint/* $HOME/bayesflow_nddms/checkpoint/
