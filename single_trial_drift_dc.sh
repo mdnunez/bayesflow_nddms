@@ -3,11 +3,11 @@
 #SBATCH -p gpu
 #SBATCH --gpus-per-node=1
 #SBATCH -n 1
-#SBATCH -t 4:00:00
+#SBATCH -t 8:00:00
  
 
 #To run on Senllius use:
-#dos2unix bayesflow_job.sh && sbatch bayesflow_job.sh
+#dos2unix single_trial_drift_dc.sh && sbatch single_trial_drift_dc.sh
 
 #Loading modules
 module load 2022
