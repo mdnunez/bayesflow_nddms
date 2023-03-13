@@ -25,10 +25,12 @@
 # 02/10/21      Michael Nunez                 Add logwienerpdf
 # 07/19/21      Michael Nunez               Remove unnecessary imports
 # 25-April-2022 Michael Nunez                   Remove use of numba
+# 13-March-2023 Michael Nunez                 Add recovery_scatter()
 
 # Modules
 import numpy as np
 from scipy import stats
+from sklearn.metrics import r2_score
 import warnings
 import matplotlib.pyplot as plt
 
@@ -751,6 +753,91 @@ def recovery(possamps, truevals):  # Parameter recovery plots
         truevals), num=100)
     recoverline = plt.plot(tempx, tempx)
     plt.setp(recoverline, linewidth=3, color=orange)
+
+
+"""Using a better Estimated versus True parameter plot"""
+
+def recovery_scatter(theta_true, theta_est, param_names,
+                      figsize=(20, 4), font_size=12, color='blue', alpha=0.4,grantB1=False):
+    """ Plots a scatter plot with abline of the estimated posterior means vs true values.
+
+    Parameters
+    ----------
+    theta_true: np.array
+        Array of true parameters.
+    theta_est: np.array
+        Array of estimated parameters.
+    param_names: list(str)
+        List of parameter names for plotting.
+    dpi: int, default:300
+        Dots per inch (dpi) for the plot.
+    figsize: tuple(int, int), default: (20,4)
+        Figure size.
+    show: boolean, default: True
+        Controls if the plot will be shown
+    filename: str, default: None
+        Filename if plot shall be saved
+    font_size: int, default: 12
+        Font size
+
+    """
+
+
+    # Plot settings
+    plt.rcParams['font.size'] = font_size
+
+    # Determine n_subplots dynamically
+    n_row = int(np.ceil(len(param_names) / 6))
+    n_col = int(np.ceil(len(param_names) / n_row))
+
+    # Initialize figure
+    f, axarr = plt.subplots(n_row, n_col, figsize=figsize)
+    if n_row > 1:
+        axarr = axarr.flat
+        
+    # --- Plot true vs estimated posterior means on a single row --- #
+    for j in range(len(param_names)):
+        
+        # Plot analytic vs estimated
+        axarr[j].scatter(theta_true[:, j], theta_est[:, j], color=color, alpha=alpha)
+        
+        # get axis limits and set equal x and y limits
+        lower_lim = min(axarr[j].get_xlim()[0], axarr[j].get_ylim()[0])
+        upper_lim = max(axarr[j].get_xlim()[1], axarr[j].get_ylim()[1])
+        axarr[j].set_xlim((lower_lim, upper_lim))
+        axarr[j].set_ylim((lower_lim, upper_lim))
+        axarr[j].plot(axarr[j].get_xlim(), axarr[j].get_xlim(), '--', color='black')
+        
+        # Compute R2
+        r2 = r2_score(theta_true[:, j], theta_est[:, j])
+        axarr[j].text(0.1, 0.8, '$R^2$={:.3f}'.format(r2),
+                     horizontalalignment='left',
+                     verticalalignment='center',
+                     transform=axarr[j].transAxes, 
+                     size=font_size)
+        
+        axarr[j].set_xlabel('True %s' % param_names[j],fontsize=font_size)
+        if j == 0:
+            # Label plot
+            axarr[j].set_ylabel('Estimated parameters',fontsize=font_size)
+        axarr[j].spines['right'].set_visible(False)
+        axarr[j].spines['top'].set_visible(False)
+
+        if grantB1:
+            axarr[0].set_xlim(-4.5, 4.5)
+            axarr[0].set_ylim(-4.5, 4.5)
+            axarr[0].set_xticks([-4, -2, 0, 2, 4])
+            axarr[0].set_yticks([-4, -2, 0, 2, 4])
+            axarr[0].set_aspect('equal', adjustable='box')
+            axarr[1].set_xlim(0.4, 2.1)
+            axarr[1].set_ylim(0.4, 2.1)
+            axarr[1].set_xticks([0.5, 1, 1.5, 2])
+            axarr[1].set_yticks([0.5, 1, 1.5, 2])
+            axarr[1].set_aspect('equal', adjustable='box')
+
+    
+    # Adjust spaces
+    f.tight_layout()
 
 
 def rsquared_pred(trueval, predval):

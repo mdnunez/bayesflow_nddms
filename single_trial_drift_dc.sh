@@ -32,8 +32,12 @@ cd "$TMPDIR"/bayesflow_nddms
 ls
 
 #Execute the Python program
-python single_trial_drift_dc.py
+python single_trial_drift_dc3.py
+
+#Make the directories if they do not exist with -p flag
+mkdir -p $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc3
+mkdir -p $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc3
  
 #Copy output directories from scratch to home
-cp -r recovery_plots/single_trial_drift_dc/* $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc/
-cp -r checkpoint/single_trial_drift_dc/* $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc/
+cp -r recovery_plots/single_trial_drift_dc3/* $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc3/
+cp -r checkpoint/single_trial_drift_dc3/* $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc3/

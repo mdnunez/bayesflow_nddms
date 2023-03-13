@@ -33,6 +33,10 @@ ls
 
 #Execute the Python program
 python single_trial_drift_dc.py
+
+#Make the directories if they do not exist with -p flag
+mkdir -p recovery_plots/NDDM_rel_ndt_bound_four_betas
+mkdir -p checkpoint/NDDM_rel_ndt_bound_four_betas
  
 #Copy output directories from scratch to home
 cp -r recovery_plots/NDDM_rel_ndt_bound_four_betas/* $HOME/bayesflow_nddms/recovery_plots/NDDM_rel_ndt_bound_four_betas/
