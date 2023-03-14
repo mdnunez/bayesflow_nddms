@@ -7,7 +7,13 @@
  
 
 #To run on Senllius use:
-#dos2unix single_trial_drift_dc.sh && sbatch single_trial_drift_dc.sh
+#dos2unix bayesflow_nddms.sh && sbatch bayesflow_nddms.sh
+
+# Model to run
+model="single_trial_drift_dc2"
+
+# Echo for first slurm output check
+echo -e "Running script $model.py"
 
 #Loading modules
 module load 2022
@@ -32,12 +38,12 @@ cd "$TMPDIR"/bayesflow_nddms
 ls
 
 #Execute the Python program
-python single_trial_drift_dc3.py
+python $model.py
 
 #Make the directories if they do not exist with -p flag
-mkdir -p $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc3
-mkdir -p $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc3
+mkdir -p $HOME/bayesflow_nddms/recovery_plots/$model
+mkdir -p $HOME/bayesflow_nddms/checkpoint/$model
  
 #Copy output directories from scratch to home
-cp -r recovery_plots/single_trial_drift_dc3/* $HOME/bayesflow_nddms/recovery_plots/single_trial_drift_dc3/
-cp -r checkpoint/single_trial_drift_dc3/* $HOME/bayesflow_nddms/checkpoint/single_trial_drift_dc3/
+cp -r recovery_plots/$model/* $HOME/bayesflow_nddms/recovery_plots/$model/
+cp -r checkpoint/$model/* $HOME/bayesflow_nddms/checkpoint/$model/
