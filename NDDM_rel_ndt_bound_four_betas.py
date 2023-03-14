@@ -146,7 +146,7 @@ num_val = 300
 val_sims = generative_model(num_val)
 
 """Quickcheck, var N is slow on my laptop, should definitely train longer for an actual application!"""
-h = trainer.train_experience_replay(epochs=500, iterations_per_epoch=1000, batch_size=32, validation_sims=val_sims)
+h = trainer.train_experience_replay(epochs=300, iterations_per_epoch=1000, batch_size=32, validation_sims=val_sims)
 
 # If the recovery plot path does not exist, create it
 plot_path = f"recovery_plots/{model_name}"
