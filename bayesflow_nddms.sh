@@ -6,7 +6,7 @@
 #SBATCH -t 8:00:00
  
 
-#To run on Senllius use:
+#To run on Snellius (and other servers with SLURM) use:
 #dos2unix bayesflow_nddms.sh && sbatch bayesflow_nddms.sh
 
 # Model to run
