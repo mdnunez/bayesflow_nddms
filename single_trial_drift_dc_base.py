@@ -3,6 +3,7 @@
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
 # 14-March-23     Michael Nunez     Adaptation of single_trial_drift_dc3 without external correlates
+# 15-March-23     Michael             Expand plotting windows
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -239,7 +240,7 @@ plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
 recovery(param_samples[converged, :, 0, None],
     true_params[converged, 0].squeeze())
-plt.ylim(-4, 4)
+plt.ylim(-5, 5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Drift')
@@ -249,7 +250,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 1, None],
     true_params[converged, 1].squeeze())
-plt.ylim(0.5, 2.0)
+plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Boundary')
@@ -259,7 +260,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 2, None],
     true_params[converged, 2].squeeze())
-plt.ylim(0.1, 0.9)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Relative Start Point')
@@ -269,7 +270,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 3, None],
     true_params[converged, 3].squeeze())
-plt.ylim(0.1, 1.0)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Non-decision time')
@@ -279,7 +280,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 4, None],
     true_params[converged, 4].squeeze())
-plt.ylim(0.0, 2.0)
+plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Trial-to-trial variability in drift-rate')
@@ -289,7 +290,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 5, None],
     true_params[converged, 5].squeeze())
-plt.ylim(0.5, 2.0)
+plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Diffusion coefficient')
@@ -299,7 +300,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[converged, :, 6, None],
     true_params[converged, 6].squeeze())
-plt.ylim(0.0, 2.0)
+plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Diffusion coefficient variability')
