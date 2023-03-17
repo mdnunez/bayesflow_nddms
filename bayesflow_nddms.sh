@@ -10,7 +10,7 @@
 #dos2unix bayesflow_nddms.sh && sbatch bayesflow_nddms.sh
 
 # Model to run
-model="single_trial_drift_dc_base"
+model="single_trial_drift_alpha"
 
 # Echo for first slurm output check
 echo -e "Running script $model.py"
