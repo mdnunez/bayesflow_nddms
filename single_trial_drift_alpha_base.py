@@ -9,7 +9,8 @@
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 1) Test if parameter standardization in configurator is useful
+# 1) Build recovery with different random trial lengths
+# 2) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -45,8 +46,8 @@ def draw_prior():
     # mu_drift ~ N(0, 2.0), mean drift rate
     mu_drift = RNG.normal(0.0, 2.0)
 
-    # alpha ~ N(1.0, 0.5) in [0, 10], boundary
-    alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+    # alpha ~ N(1.0, 0.5) in [0, 10], mean boundary
+    mu_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
     # beta ~ Beta(2.0, 2.0), relative start point
     beta = RNG.beta(2.0, 2.0)
@@ -57,46 +58,46 @@ def draw_prior():
     # eta ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in drift
     eta = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
 
-    # mu_dc ~ N(1.0, 0.5) in [0, 10], mean diffusion coefficient
-    mu_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+    # dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient
+    dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # var_dc ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in diffusion coefficient
-    var_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+    # var_alpha ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in boundary
+    var_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
 
-    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, mu_dc, var_dc))
+    p_samples = np.hstack((mu_drift, mu_alpha, beta, ter, eta, dc, var_alpha))
     return p_samples
 
 
 @njit
-def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
+def diffusion_trial(mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha,
     dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
-    n_steps = 0.
-    evidence = boundary * beta
-   
     # trial-to-trial drift rate variability
     drift_trial = mu_drift + eta * np.random.normal()
 
     # trial-to-trial diffusion coefficient variability
     while True:
-        dc_trial = mu_dc + dc_var * np.random.normal()
-        if dc_trial>0:
+        bound_trial = mu_alpha + var_alpha * np.random.normal()
+        if bound_trial>0:
             break
-   
+
+    n_steps = 0.
+    evidence = bound_trial * beta
+  
     # Simulate a single DM path
-    while ((evidence > 0) and (evidence < boundary) and (n_steps < max_steps)):
+    while ((evidence > 0) and (evidence < bound_trial) and (n_steps < max_steps)):
 
         # DDM equation
-        evidence += drift_trial*dt + np.sqrt(dt) * dc_trial * np.random.normal()
+        evidence += drift_trial*dt + np.sqrt(dt) * dc * np.random.normal()
 
         # Increment step
         n_steps += 1.0
 
     rt = n_steps * dt + tau
 
- 
-    if evidence >= boundary:
+
+    if evidence >= bound_trial:
         choice =  1  # choice A
     elif evidence <= 0:
         choice = -1  # choice B
@@ -108,11 +109,11 @@ def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    mu_drift, boundary, beta, tau, eta, mu_dc, dc_var = params
+    mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha = params
     rt = np.empty(n_trials)
     choice = np.empty(n_trials)
     for i in range(n_trials):
-        rt[i], choice[i] = diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var)
+        rt[i], choice[i] = diffusion_trial(mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha)
 
     sim_data = np.stack((rt, choice), axis=-1)
     return sim_data
@@ -132,13 +133,13 @@ generative_model = bf.simulation.GenerativeModel(prior, simulator)
 def configurator(sim_dict):
     """Configures the outputs of a generative model for interaction with 
     BayesFlow modules."""
-    
+   
     out = dict()
     # These will be passed through the summary network. In this case,
     # it's just the data, but it can be other stuff as well.
     data = sim_dict['sim_data'].astype(np.float32)
     out['summary_conditions'] = data
-    
+   
     # These will be concatenated to the outputs of the summary network
     # Convert N to log N since neural nets cant deal well with large numbers
     N = np.log(sim_dict['sim_non_batchable_context'])
@@ -146,7 +147,7 @@ def configurator(sim_dict):
     # extra dimension needed
     N_vec = N * np.ones((data.shape[0], 1), dtype=np.float32)
     out['direct_conditions'] = N_vec
-    
+   
     # Finally, extract parameters. Any transformations (e.g., standardization)
     # should happen here.
     out['parameters'] = sim_dict['prior_draws'].astype(np.float32)
@@ -216,17 +217,15 @@ fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 # Posterior means
 param_means = param_samples.mean(axis=1)
 
-# Find the index of clearly good posterior means (inside the prior range)
-# converged = (np.all(np.abs(param_means) < 5, axis=1))
-converged = (np.all(np.abs(param_means) < 5, axis=1)) & (param_means[:, 3] > 0) & \
- (param_means[:, 3] < 1) & (param_means[:, 1] < 2)
-print('%d of %d model fits were in the prior range for all parameters' % 
+# Find the index of clearly good posterior means of tau (inside the prior range)
+converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
+print('%d of %d model fits were in the prior range for non-decision time' % 
     (np.sum(converged), converged.shape[0]))
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][converged, :],
-                  param_means[:, np.array([0, 5, 1, 2, 3])][converged, :],
+recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
+                  param_means[:, np.array([0, 5, 1, 2, 3])][:, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
@@ -237,8 +236,8 @@ plt.savefig(f"{plot_path}/{model_name}_recovery_short.svg")
 # Plot the results
 plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[converged, :, 0, None],
-    true_params[converged, 0].squeeze())
+recovery(param_samples[:, :, 0, None],
+    true_params[:, 0].squeeze())
 plt.ylim(-5, 5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -247,8 +246,8 @@ plt.savefig(f'{plot_path}/{model_name}_Drift.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 1, None],
-    true_params[converged, 1].squeeze())
+recovery(param_samples[:, :, 1, None],
+    true_params[:, 1].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -257,8 +256,8 @@ plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 2, None],
-    true_params[converged, 2].squeeze())
+recovery(param_samples[:, :, 2, None],
+    true_params[:, 2].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -267,8 +266,8 @@ plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 3, None],
-    true_params[converged, 3].squeeze())
+recovery(param_samples[:, :, 3, None],
+    true_params[:, 3].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -277,8 +276,8 @@ plt.savefig(f'{plot_path}/{model_name}_NDT.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 4, None],
-    true_params[converged, 4].squeeze())
+recovery(param_samples[:, :, 4, None],
+    true_params[:, 4].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -287,8 +286,8 @@ plt.savefig(f'{plot_path}/{model_name}_drift_variability.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 5, None],
-    true_params[converged, 5].squeeze())
+recovery(param_samples[:, :, 5, None],
+    true_params[:, 5].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -297,11 +296,11 @@ plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 6, None],
-    true_params[converged, 6].squeeze())
+recovery(param_samples[:, :, 6, None],
+    true_params[:, 6].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('Diffusion coefficient variability')
-plt.savefig(f'{plot_path}/{model_name}_DC_variability.png')
+plt.title('Diffusion coefficient boundary')
+plt.savefig(f'{plot_path}/{model_name}_Boundary_variability.png')
 plt.close()

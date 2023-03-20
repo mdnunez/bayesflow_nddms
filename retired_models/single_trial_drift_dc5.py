@@ -2,16 +2,16 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 14-March-23     Michael Nunez      Adaptation of single_trial_drift_dc3 
-#      with two fixed effects on two external parameters
-# 15-March-23     Michael             Expand plotting windows
+# 17-March-23     Michael Nunez      Adaptation of single_trial_drift_dc4
+#          Standardize EEG generation to produce standard normal data
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 1) Test if parameter standardization in configurator is useful
+# 1) Increase measurement noise prior range to allow for models without EEG relationships
+# 2) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -21,11 +21,13 @@ import os
 import numpy as np
 from scipy.stats import truncnorm
 from numba import njit
+import seaborn as sns
 import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter
 
-model_name = 'single_trial_drift_dc4'
+model_name = 'single_trial_drift_dc5'
+view_simulation = False
 
 # Generative Model Specifications User Defined Functions, non-batchable
 
@@ -115,10 +117,18 @@ def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
 
    
     # EEG1
-    eeg1 = np.random.normal(1*drift_trial + gamma_dc1*dc_trial, sigma1)
+    temp_eeg1 = np.random.normal(1*drift_trial + gamma_dc1*dc_trial, sigma1)
+    # Observe only standardized measures
+    mu_eeg1 = 1*mu_drift + gamma_dc1*mu_dc
+    var_eeg1 = eta**2 + (gamma_dc1**2 * dc_var**2) + sigma1**2
+    eeg1 = (temp_eeg1 - mu_eeg1) / np.sqrt(var_eeg1)
 
     # EEG2
-    eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*dc_trial, sigma2)
+    temp_eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*dc_trial, sigma2)
+    # Observe only standardized measures
+    mu_eeg2 = gamma_dr2*mu_drift + mu_dc
+    var_eeg2 = (gamma_dr2**2 * eta**2) + dc_var**2 + sigma2**2
+    eeg2 = (temp_eeg2 - mu_eeg2) / np.sqrt(var_eeg2)
 
   
     if evidence >= boundary:
@@ -178,6 +188,79 @@ def configurator(sim_dict):
     out['parameters'] = sim_dict['prior_draws'].astype(np.float32)
     return out
 
+
+if view_simulation:
+    # Plot the posterior distributions of choice RTs and EEG data
+    num_test = 5000
+
+
+    # Need to test for different Ns, which is what the following code does
+    eeg1_means =np.empty((num_test))
+    eeg1_vars = np.empty((num_test))
+    eeg2_means =np.empty((num_test))
+    eeg2_vars = np.empty((num_test))
+    rt_means = np.empty((num_test))
+    choice_means = np.empty((num_test))
+    np.random.seed(2023) # Set the random seed to generate the same plots every time
+    for i in range(num_test):
+        raw_sims = generative_model(1)
+        these_sims = raw_sims['sim_data']
+        eeg1_means[i] = np.mean(np.squeeze(these_sims[0, :, 1]))
+        eeg1_vars[i] = np.var(np.squeeze(these_sims[0, :, 1]))
+        eeg2_means[i] = np.mean(np.squeeze(these_sims[0, :, 2]))
+        eeg2_vars[i] = np.var(np.squeeze(these_sims[0, :, 2]))
+        rt_means[i] = np.mean(np.abs(np.squeeze(these_sims[0,:, 0])))
+        choice_means[i] = np.mean(.5 + .5*np.sign(np.squeeze(these_sims[0,:, 0]))) #convert [1, -1] to [1, 0]
+
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg1_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg1_vars)
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg2_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg2_vars)
+
+    plt.figure()
+    sns.kdeplot(rt_means)
+
+    plt.figure()
+    sns.kdeplot(choice_means)
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 2]))
+
+
+    sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
+    sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == 1])
+
+
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == -1])
+
+
+    # Minimum RT
+    print('The minimum RT is %.3f when the NDT was %.3f' % 
+        (np.min(sim_rts), raw_sims['prior_draws'][0,3]))
+
+
 # BayesFlow Setup
 summary_net = bf.networks.InvariantNetwork()
 inference_net = bf.networks.InvertibleNetwork(num_params=11)
@@ -223,15 +306,25 @@ f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
 f.savefig(f"{plot_path}/{model_name}_validation.png")
 
 # Computational Adequacy
-# Need to test for different Ns, not just a random one!
 num_test = 500
 num_posterior_draws = 10000
+num_params=11
 
-np.random.seed(1)
-model_sims = configurator(generative_model(num_test))
-param_samples = amortizer.sample(model_sims, n_samples=num_posterior_draws)
+# Need to test for different Ns, which is what the following code does
+param_samples = np.empty((num_test, num_posterior_draws, num_params))
+true_params = np.empty((num_test, num_params))
+simulated_trial_nums = np.empty((num_test))
+np.random.seed(2023) # Set the random seed to generate the same plots every time
+for i in range(num_test):
+    model_sims = configurator(generative_model(1))
+    simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
+    true_params[i, :] = model_sims['parameters']
+    param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
 
-true_params = model_sims['parameters']
+
+print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
+    (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
+
 
 # BayesFlow native recovery plot
 fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
@@ -252,8 +345,8 @@ print('%d of %d model fits were in the prior range for all parameters' %
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][converged, :],
-                  param_means[:, np.array([0, 5, 1, 2, 3])][converged, :],
+recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
+                  param_means[:, np.array([0, 5, 1, 2, 3])][:, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
@@ -264,9 +357,9 @@ plt.savefig(f"{plot_path}/{model_name}_recovery_short.svg")
 # Plot the results
 plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[converged, :, 0, None],
-    true_params[converged, 0].squeeze())
-plt.ylim(-5, 5)
+recovery(param_samples[:, :, 0, None],
+    true_params[:, 0].squeeze())
+plt.ylim(-6, 6)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Drift')
@@ -274,8 +367,8 @@ plt.savefig(f'{plot_path}/{model_name}_Drift.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 1, None],
-    true_params[converged, 1].squeeze())
+recovery(param_samples[:, :, 1, None],
+    true_params[:, 1].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -284,8 +377,8 @@ plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 2, None],
-    true_params[converged, 2].squeeze())
+recovery(param_samples[:, :, 2, None],
+    true_params[:, 2].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -294,8 +387,8 @@ plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 3, None],
-    true_params[converged, 3].squeeze())
+recovery(param_samples[:, :, 3, None],
+    true_params[:, 3].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -304,8 +397,8 @@ plt.savefig(f'{plot_path}/{model_name}_NDT.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 4, None],
-    true_params[converged, 4].squeeze())
+recovery(param_samples[:, :, 4, None],
+    true_params[:, 4].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -314,8 +407,8 @@ plt.savefig(f'{plot_path}/{model_name}_drift_variability.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 5, None],
-    true_params[converged, 5].squeeze())
+recovery(param_samples[:, :, 5, None],
+    true_params[:, 5].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -324,8 +417,8 @@ plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 6, None],
-    true_params[converged, 6].squeeze())
+recovery(param_samples[:, :, 6, None],
+    true_params[:, 6].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -335,8 +428,8 @@ plt.close()
 
 
 plt.figure()
-recovery(param_samples[converged, :, 7, None],
-    true_params[converged, 7].squeeze())
+recovery(param_samples[:, :, 7, None],
+    true_params[:, 7].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -345,8 +438,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_EEG1.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 8, None],
-    true_params[converged, 8].squeeze())
+recovery(param_samples[:, :, 8, None],
+    true_params[:, 8].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -355,8 +448,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_drift_EEG2.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 9, None],
-    true_params[converged, 9].squeeze())
+recovery(param_samples[:, :, 9, None],
+    true_params[:, 9].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -365,12 +458,11 @@ plt.savefig(f'{plot_path}/{model_name}_EEG1Noise.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[converged, :, 10, None],
-    true_params[converged, 10].squeeze())
+recovery(param_samples[:, :, 10, None],
+    true_params[:, 10].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('EEG2 variance not related to cognition')
 plt.savefig(f'{plot_path}/{model_name}_EEG2Noise.png')
 plt.close()
-

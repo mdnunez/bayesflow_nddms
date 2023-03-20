@@ -755,7 +755,7 @@ def recovery(possamps, truevals):  # Parameter recovery plots
     plt.setp(recoverline, linewidth=3, color=orange)
 
 
-"""Using a better Estimated versus True parameter plot"""
+# Using a better Estimated versus True parameter plot"""
 
 def recovery_scatter(theta_true, theta_est, param_names,
                       figsize=(20, 4), font_size=12, color='blue', alpha=0.4,grantB1=False):
@@ -817,7 +817,7 @@ def recovery_scatter(theta_true, theta_est, param_names,
                      size=font_size)
         
         axarr[j].set_xlabel('True %s' % param_names[j],fontsize=font_size)
-        if j == 0:
+        if np.mod(j,6) == 0:
             # Label plot
             axarr[j].set_ylabel('Estimated parameters',fontsize=font_size)
         axarr[j].spines['right'].set_visible(False)
@@ -836,6 +836,79 @@ def recovery_scatter(theta_true, theta_est, param_names,
             axarr[1].set_aspect('equal', adjustable='box')
 
     
+    # Adjust spaces
+    f.tight_layout()
+
+
+def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, parameter2'],
+                      figsize=(20, 4), font_size=12, color='blue', alpha=0.25):
+    """ Plots a scatter plot of a joint posterior distributions
+
+    Parameters
+    ----------
+    posteriors1: np.array
+        Array of marginal posteriors
+    posteriors2: np.array
+        Array of marginal posteriors
+    param_names: list(str)
+        List of two parameter names
+    figsize: tuple(int, int), default: (20,4)
+        Figure size.
+    font_size: int, default: 12
+        Font size
+
+    """
+
+    # Raise an error if the posteriors are different
+    if posteriors1.shape != posteriors2.shape:
+        raise ValueError("Posterior arrays have different shapes")
+
+    if posteriors1.ndim > 2:
+        raise ValueError("First posterior array has more than 2 dimensions")
+
+    if posteriors2.ndim > 2:
+        raise ValueError("Second posterior array has more than 2 dimensions")
+
+    if posteriors1.shape[0] > 20:
+        raise ValueError("The function would be making more than 20 subplots")
+
+    # Plot settings
+    plt.rcParams['font.size'] = font_size
+
+    # Number of plots (number of joint posteriors)
+    num_plots = posteriors1.shape[0]
+
+    # Determine n_subplots dynamically
+    n_row = int(np.ceil(num_plots / 6))
+    n_col = int(np.ceil(num_plots / n_row))
+
+    # Initialize figure
+    f, axarr = plt.subplots(n_row, n_col, figsize=figsize)
+    if n_row > 1:
+        axarr = axarr.flat
+        
+    # --- Plot true vs estimated posterior means on a single row --- #
+    for j in range(num_plots):
+        
+        # Plot analytic vs estimated
+        axarr[j].scatter(posteriors1[j, :], posteriors2[j, :], color=color, alpha=alpha)
+        
+        # Compute R2
+        pearson, pvalue = stats.pearsonr(posteriors1[j, :], posteriors2[j, :])
+        axarr[j].text(0.1, 0.8, '$\\rho$={:.3f}'.format(pearson),
+                     horizontalalignment='left',
+                     verticalalignment='center',
+                     transform=axarr[j].transAxes, 
+                     size=font_size)
+        
+        axarr[j].set_xlabel(f'{param_names[0]}', fontsize=font_size)
+        if np.mod(j,6) == 0:
+            # Label plot
+            axarr[j].set_ylabel(f'{param_names[1]}',fontsize=font_size)
+        axarr[j].spines['right'].set_visible(False)
+        axarr[j].spines['top'].set_visible(False)
+
+   
     # Adjust spaces
     f.tight_layout()
 

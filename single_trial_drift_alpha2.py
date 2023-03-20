@@ -2,15 +2,16 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 17-March-23     Michael Nunez      Conversion from single_trial_drift_dc4
-# 20-March-23     Michael Nunez       Updates to saving of plots, beginning of script
+# 20-March-23     Michael Nunez      Conversion from single_trial_drift_alpha.py
+#                  predicts standardized EEG measures,
+#    increased prior range for noise in EEG to allow for models without EEG relationships
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 2) Test if parameter standardization in configurator is useful
+# 1) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -20,11 +21,13 @@ import os
 import numpy as np
 from scipy.stats import truncnorm
 from numba import njit
+import seaborn as sns
 import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
 num_epochs = 1
+view_simulation = False
 
 # Get the filename of the currently running script
 filename = os.path.basename(__file__)
@@ -83,15 +86,17 @@ def draw_prior():
     # gamma_bd2 = 1, Fixed effect of single-trial boundary on EEG2
 
     # sigma1 ~ U(0.0, 1.0),measurement noise of EEG1, less than 1 (assume standardized measure)
-    sigma1 = RNG.uniform(0.0, 1.0)
+    sigma1 = RNG.uniform(0.0, 5.0)
 
     # sigma2 ~ U(0.0, 1.0),measurement noise of EEG2, less than 1 (assume standardized measure)
-    sigma2 = RNG.uniform(0.0, 1.0)
+    sigma2 = RNG.uniform(0.0, 5.0)
 
     p_samples = np.hstack((mu_drift, mu_alpha, beta, ter, eta, dc, var_alpha, gamma_dc1,
         gamma_dr2, sigma1, sigma2))
     return p_samples
 
+
+num_params = draw_prior().shape[0]
 
 @njit
 def diffusion_trial(mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha,
@@ -123,10 +128,18 @@ def diffusion_trial(mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha,
 
    
     # EEG1
-    eeg1 = np.random.normal(1*drift_trial + gamma_bd1*bound_trial, sigma1)
+    temp_eeg1 = np.random.normal(1*drift_trial + gamma_bd1*bound_trial, sigma1)
+    # Observe only standardized measures
+    mu_eeg1 = 1*mu_drift + gamma_bd1*mu_alpha
+    var_eeg1 = eta**2 + (gamma_bd1**2 * var_alpha**2) + sigma1**2
+    eeg1 = (temp_eeg1 - mu_eeg1) / np.sqrt(var_eeg1)
 
     # EEG2
-    eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*bound_trial, sigma2)
+    temp_eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*bound_trial, sigma2)
+    # Observe only standardized measures
+    mu_eeg2 = gamma_dr2*mu_drift + mu_alpha
+    var_eeg2 = (gamma_dr2**2 * eta**2) + var_alpha**2 + sigma2**2
+    eeg2 = (temp_eeg2 - mu_eeg2) / np.sqrt(var_eeg2)
 
   
     if evidence >= bound_trial:
@@ -186,9 +199,83 @@ def configurator(sim_dict):
     out['parameters'] = sim_dict['prior_draws'].astype(np.float32)
     return out
 
+
+if view_simulation:
+    # Plot the posterior distributions of choice RTs and EEG data
+    num_test = 5000
+
+
+    # Need to test for different Ns, which is what the following code does
+    eeg1_means =np.empty((num_test))
+    eeg1_vars = np.empty((num_test))
+    eeg2_means =np.empty((num_test))
+    eeg2_vars = np.empty((num_test))
+    rt_means = np.empty((num_test))
+    choice_means = np.empty((num_test))
+    np.random.seed(2023) # Set the random seed to generate the same plots every time
+    for i in range(num_test):
+        raw_sims = generative_model(1)
+        these_sims = raw_sims['sim_data']
+        eeg1_means[i] = np.mean(np.squeeze(these_sims[0, :, 1]))
+        eeg1_vars[i] = np.var(np.squeeze(these_sims[0, :, 1]))
+        eeg2_means[i] = np.mean(np.squeeze(these_sims[0, :, 2]))
+        eeg2_vars[i] = np.var(np.squeeze(these_sims[0, :, 2]))
+        rt_means[i] = np.mean(np.abs(np.squeeze(these_sims[0,:, 0])))
+        choice_means[i] = np.mean(.5 + .5*np.sign(np.squeeze(these_sims[0,:, 0]))) #convert [1, -1] to [1, 0]
+
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg1_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg1_vars)
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg2_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg2_vars)
+
+    plt.figure()
+    sns.kdeplot(rt_means)
+
+    plt.figure()
+    sns.kdeplot(choice_means)
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 2]))
+
+
+    sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
+    sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == 1])
+
+
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == -1])
+
+
+    # Minimum RT
+    print('The minimum RT is %.3f when the NDT was %.3f' % 
+        (np.min(sim_rts), raw_sims['prior_draws'][0,3]))
+
+
+
 # BayesFlow Setup
 summary_net = bf.networks.InvariantNetwork()
-inference_net = bf.networks.InvertibleNetwork(num_params=11)
+inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
@@ -233,7 +320,6 @@ f.savefig(f"{plot_path}/{model_name}_validation.png")
 # Computational Adequacy
 num_test = 500
 num_posterior_draws = 10000
-num_params=11
 
 # Need to test for different Ns, which is what the following code does
 param_samples = np.empty((num_test, num_posterior_draws, num_params))

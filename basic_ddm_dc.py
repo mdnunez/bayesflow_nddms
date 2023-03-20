@@ -2,9 +2,7 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 14-March-23     Michael Nunez     Adaptation of single_trial_drift_dc3 without external correlates
-# 15-March-23     Michael             Expand plotting windows
-# 17-March-23     Michael Nunez    Better recovery plots with different Ns, plot all, train flag
+# 20-March-23     Michael        Basic DDM with the diffusion coefficient free to vary
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -24,10 +22,20 @@ from scipy.stats import truncnorm
 from numba import njit
 import bayesflow as bf
 import matplotlib.pyplot as plt
-from pyhddmjagsutils import recovery, recovery_scatter
+from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-model_name = 'single_trial_drift_dc_base'
-train = False
+
+num_epochs = 500
+
+
+# Get the filename of the currently running script
+filename = os.path.basename(__file__)
+
+# Remove the .py extension from the filename
+model_name = os.path.splitext(filename)[0]
+
+print(f'Training fitting network for model {model_name} with {num_epochs} training epochs.')
+
 
 # Generative Model Specifications User Defined Functions, non-batchable
 
@@ -45,8 +53,8 @@ RNG = np.random.default_rng(2023)
 np.set_printoptions(suppress=True)
 def draw_prior():
 
-    # mu_drift ~ N(0, 2.0), mean drift rate
-    mu_drift = RNG.normal(0.0, 2.0)
+    # drift ~ N(0, 2.0), mean drift rate
+    drift = RNG.normal(0.0, 2.0)
 
     # alpha ~ N(1.0, 0.5) in [0, 10], boundary
     alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
@@ -57,48 +65,36 @@ def draw_prior():
     # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time
     ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
 
-    # eta ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in drift
-    eta = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+    # dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient
+    dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # mu_dc ~ N(1.0, 0.5) in [0, 10], mean diffusion coefficient
-    mu_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
-
-    # var_dc ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in diffusion coefficient
-    var_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
-
-    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, mu_dc, var_dc))
+    p_samples = np.hstack((drift, alpha, beta, ter, dc))
     return p_samples
 
 
+num_params = draw_prior().shape[0]
+
 @njit
-def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
+def diffusion_trial(drift, boundary, beta, tau, dc,
     dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
     n_steps = 0.
     evidence = boundary * beta
    
-    # trial-to-trial drift rate variability
-    drift_trial = mu_drift + eta * np.random.normal()
-
-    # trial-to-trial diffusion coefficient variability
-    while True:
-        dc_trial = mu_dc + dc_var * np.random.normal()
-        if dc_trial>0:
-            break
-   
+  
     # Simulate a single DM path
     while ((evidence > 0) and (evidence < boundary) and (n_steps < max_steps)):
 
         # DDM equation
-        evidence += drift_trial*dt + np.sqrt(dt) * dc_trial * np.random.normal()
+        evidence += drift*dt + np.sqrt(dt) * dc * np.random.normal()
 
         # Increment step
         n_steps += 1.0
 
     rt = n_steps * dt + tau
 
- 
+
     if evidence >= boundary:
         choice =  1  # choice A
     elif evidence <= 0:
@@ -111,11 +107,11 @@ def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    mu_drift, boundary, beta, tau, eta, mu_dc, dc_var = params
+    drift, boundary, beta, tau, dc = params
     rt = np.empty(n_trials)
     choice = np.empty(n_trials)
     for i in range(n_trials):
-        rt[i], choice[i] = diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var)
+        rt[i], choice[i] = diffusion_trial(drift, boundary, beta, tau, dc)
 
     sim_data = np.stack((rt, choice), axis=-1)
     return sim_data
@@ -157,7 +153,7 @@ def configurator(sim_dict):
 
 # BayesFlow Setup
 summary_net = bf.networks.InvariantNetwork()
-inference_net = bf.networks.InvertibleNetwork(num_params=7)
+inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
@@ -190,21 +186,19 @@ if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
 
-if train:
-    # Experience-replay training
-    losses = trainer.train_experience_replay(epochs=500,
-                                                 batch_size=32,
-                                                 iterations_per_epoch=1000,
-                                                 validation_sims=val_sims)
-    # Validation, Loss Curves
-    f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
-    f.savefig(f"{plot_path}/{model_name}_validation.png")
+# Experience-replay training
+losses = trainer.train_experience_replay(epochs=num_epochs,
+                                             batch_size=32,
+                                             iterations_per_epoch=1000,
+                                             validation_sims=val_sims)
+# Validation, Loss Curves
+f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
+f.savefig(f"{plot_path}/{model_name}_validation.png")
 
 
 # Computational Adequacy
 num_test = 500
 num_posterior_draws = 10000
-num_params=7
 
 # Need to test for different Ns, which is what the following code does
 param_samples = np.empty((num_test, num_posterior_draws, num_params))
@@ -223,30 +217,26 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
 
 # BayesFlow native recovery plot
 fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-    ['mu_drift', 'boundary', 'beta', 'tau', 'eta', 'mu_dc', 'dc_var'])
+    ['drift', 'boundary', 'beta', 'tau', 'dc'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
 # Posterior means
 param_means = param_samples.mean(axis=1)
 
-# Find the index of clearly good posterior means (inside the prior range)
-# converged = (np.all(np.abs(param_means) < 5, axis=1))
-converged = (np.all(np.abs(param_means) < 5, axis=1)) & (param_means[:, 3] > 0) & \
- (param_means[:, 3] < 1) & (param_means[:, 1] < 2)
-print('%d of %d model fits were in the prior range for all parameters' % 
+# Find the index of clearly good posterior means of tau (inside the prior range)
+converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
+print('%d of %d model fits were in the prior range for non-decision time' % 
     (np.sum(converged), converged.shape[0]))
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
-                  param_means[:, np.array([0, 5, 1, 2, 3])][:, :],
+recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][:, :],
+                  param_means[:, np.array([0, 4, 1, 2, 3])][:, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
 plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.pdf")
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.svg")
 
 # Plot the results
 plt.figure()
@@ -296,26 +286,43 @@ recovery(param_samples[:, :, 4, None],
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('Trial-to-trial variability in drift-rate')
-plt.savefig(f'{plot_path}/{model_name}_drift_variability.png')
-plt.close()
-
-plt.figure()
-recovery(param_samples[:, :, 5, None],
-    true_params[:, 5].squeeze())
-plt.ylim(0.0, 2.5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
 plt.title('Diffusion coefficient')
 plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
-plt.figure()
-recovery(param_samples[:, :, 6, None],
-    true_params[:, 6].squeeze())
-plt.ylim(0.0, 2.5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Diffusion coefficient variability')
-plt.savefig(f'{plot_path}/{model_name}_DC_variability.png')
-plt.close()
+# By default plot only the first 12 random posterior draws
+plot_posterior2d(param_samples[0:12, :, 4].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Diffusion coefficient', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
+
+plot_posterior2d(param_samples[0:12, :, 0].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Drift rate', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift.png")
+
+plot_posterior2d(param_samples[0:12, :, 4].squeeze(),
+    param_samples[0:12, :, 0].squeeze(),
+   ['Diffusion coefficient', 'Drift rate'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc.png")
+
+plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
+    param_samples[0:12, :, 0].squeeze(),
+   ['Non-decision time', 'Drift rate'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt.png")
+
+plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Non-decision time', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt.png")
+
+plot_posterior2d(param_samples[0:12, :, 2].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Start point', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start.png")

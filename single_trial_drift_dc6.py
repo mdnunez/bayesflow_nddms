@@ -2,32 +2,42 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 14-March-23     Michael Nunez     Adaptation of single_trial_drift_dc3 without external correlates
-# 15-March-23     Michael             Expand plotting windows
-# 17-March-23     Michael Nunez    Better recovery plots with different Ns, plot all, train flag
+# 19-March-23     Michael Nunez      Adaptation of single_trial_drift_dc5
+#  with increased prior range for noise in EEG to allow for models without EEG relationships
+# 20-March-23     Michael Nunez         Automatically obtain model name from script name
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 1) Test if parameter standardization in configurator is useful
+# 2) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
-# 2) Do not create checkpoint folder manually, 
-# let BayesFlow do it otherwise get a no memory.pkl error
+# 2) Do not create checkpoint folder manually, let BayesFlow do it otherwise get a no memory.pkl error
 
 import os
 import numpy as np
 from scipy.stats import truncnorm
 from numba import njit
+import seaborn as sns
 import bayesflow as bf
 import matplotlib.pyplot as plt
-from pyhddmjagsutils import recovery, recovery_scatter
+from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-model_name = 'single_trial_drift_dc_base'
-train = False
+num_epochs = 1
+view_simulation = False
+
+# Get the filename of the currently running script
+filename = os.path.basename(__file__)
+
+# Remove the .py extension from the filename
+model_name = os.path.splitext(filename)[0]
+
+print(f'Training fitting network for model {model_name} with {num_epochs} training epochs.')
+
+
 
 # Generative Model Specifications User Defined Functions, non-batchable
 
@@ -66,13 +76,30 @@ def draw_prior():
     # var_dc ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in diffusion coefficient
     var_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
 
-    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, mu_dc, var_dc))
+    # gamma_dr1 = 1 Fixed effect of single-trial drift rate on EEG1
+
+    # gamma_dc1 ~ N(0, 1.0), Effect of single-trial diffusion coefficient on EEG1
+    gamma_dc1 = RNG.normal(0.0, 1.0)
+
+    # gamma_dr2 ~ N(0, 1.0), Effect of single-trial drift rate on EEG2
+    gamma_dr2 = RNG.normal(0.0, 1.0)
+
+    # gamma_dc2 = 1, Fixed effect of single-trial diffusion coefficient on EEG2
+
+    # sigma1 ~ U(0.0, 5.0),measurement noise of EEG1, less than 1 (assume standardized measure)
+    sigma1 = RNG.uniform(0.0, 5.0)
+
+    # sigma2 ~ U(0.0, 5.0),measurement noise of EEG2, less than 1 (assume standardized measure)
+    sigma2 = RNG.uniform(0.0, 5.0)
+
+    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, mu_dc, var_dc, gamma_dc1,
+        gamma_dr2, sigma1, sigma2))
     return p_samples
 
 
 @njit
 def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
-    dt=.01, max_steps=400.):
+	gamma_dc1, gamma_dr2, sigma1, sigma2, dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
     n_steps = 0.
@@ -96,28 +123,44 @@ def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
         # Increment step
         n_steps += 1.0
 
-    rt = n_steps * dt + tau
+    rt = n_steps * dt
 
- 
+   
+    # EEG1
+    temp_eeg1 = np.random.normal(1*drift_trial + gamma_dc1*dc_trial, sigma1)
+    # Observe only standardized measures
+    mu_eeg1 = 1*mu_drift + gamma_dc1*mu_dc
+    var_eeg1 = eta**2 + (gamma_dc1**2 * dc_var**2) + sigma1**2
+    eeg1 = (temp_eeg1 - mu_eeg1) / np.sqrt(var_eeg1)
+
+    # EEG2
+    temp_eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*dc_trial, sigma2)
+    # Observe only standardized measures
+    mu_eeg2 = gamma_dr2*mu_drift + mu_dc
+    var_eeg2 = (gamma_dr2**2 * eta**2) + dc_var**2 + sigma2**2
+    eeg2 = (temp_eeg2 - mu_eeg2) / np.sqrt(var_eeg2)
+
+  
     if evidence >= boundary:
-        choice =  1  # choice A
+        choicert =  tau + rt  
     elif evidence <= 0:
-        choice = -1  # choice B
+        choicert = -tau - rt
     else:
         choicert = 0  # This indicates a missing response
-    return rt, choice
+    return choicert, eeg1, eeg2
 
 @njit
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    mu_drift, boundary, beta, tau, eta, mu_dc, dc_var = params
-    rt = np.empty(n_trials)
-    choice = np.empty(n_trials)
+    mu_drift, boundary, beta, tau, eta, mu_dc, dc_var, gamma_dc1, gamma_dr2, sigma1, sigma2 = params
+    choicert = np.empty(n_trials)
+    z1 = np.empty(n_trials)
+    z2 = np.empty(n_trials)
     for i in range(n_trials):
-        rt[i], choice[i] = diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var)
-
-    sim_data = np.stack((rt, choice), axis=-1)
+        choicert[i], z1[i], z2[i] = diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var, gamma_dc1, gamma_dr2, sigma1, sigma2)
+   
+    sim_data = np.stack((choicert, z1, z2), axis=-1)
     return sim_data
 
 
@@ -155,9 +198,82 @@ def configurator(sim_dict):
     out['parameters'] = sim_dict['prior_draws'].astype(np.float32)
     return out
 
+
+if view_simulation:
+    # Plot the posterior distributions of choice RTs and EEG data
+    num_test = 5000
+
+
+    # Need to test for different Ns, which is what the following code does
+    eeg1_means =np.empty((num_test))
+    eeg1_vars = np.empty((num_test))
+    eeg2_means =np.empty((num_test))
+    eeg2_vars = np.empty((num_test))
+    rt_means = np.empty((num_test))
+    choice_means = np.empty((num_test))
+    np.random.seed(2023) # Set the random seed to generate the same plots every time
+    for i in range(num_test):
+        raw_sims = generative_model(1)
+        these_sims = raw_sims['sim_data']
+        eeg1_means[i] = np.mean(np.squeeze(these_sims[0, :, 1]))
+        eeg1_vars[i] = np.var(np.squeeze(these_sims[0, :, 1]))
+        eeg2_means[i] = np.mean(np.squeeze(these_sims[0, :, 2]))
+        eeg2_vars[i] = np.var(np.squeeze(these_sims[0, :, 2]))
+        rt_means[i] = np.mean(np.abs(np.squeeze(these_sims[0,:, 0])))
+        choice_means[i] = np.mean(.5 + .5*np.sign(np.squeeze(these_sims[0,:, 0]))) #convert [1, -1] to [1, 0]
+
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg1_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg1_vars)
+
+    # This should include a large mass around 0
+    plt.figure()
+    sns.kdeplot(eeg2_means)
+
+    # This should include a large mass around 1
+    plt.figure()
+    sns.kdeplot(eeg2_vars)
+
+    plt.figure()
+    sns.kdeplot(rt_means)
+
+    plt.figure()
+    sns.kdeplot(choice_means)
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
+
+    # This should usually be standard normal
+    plt.figure()
+    sns.kdeplot(np.squeeze(these_sims[0, :, 2]))
+
+
+    sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
+    sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == 1])
+
+
+    # This should look like a shifted Wald
+    plt.figure()
+    sns.kdeplot(sim_rts[sim_choices == -1])
+
+
+    # Minimum RT
+    print('The minimum RT is %.3f when the NDT was %.3f' % 
+        (np.min(sim_rts), raw_sims['prior_draws'][0,3]))
+
+
 # BayesFlow Setup
 summary_net = bf.networks.InvariantNetwork()
-inference_net = bf.networks.InvertibleNetwork(num_params=7)
+inference_net = bf.networks.InvertibleNetwork(num_params=11)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
@@ -183,28 +299,26 @@ configurators, generative models and networks"""
 num_val = 300
 val_sims = generative_model(num_val)
 
+# Experience-replay training
+losses = trainer.train_experience_replay(epochs=num_epochs,
+                                             batch_size=32,
+                                             iterations_per_epoch=1000,
+                                             validation_sims=val_sims)
+
 
 # If the recovery plot path does not exist, create it
 plot_path = f"recovery_plots/{model_name}"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
-
-if train:
-    # Experience-replay training
-    losses = trainer.train_experience_replay(epochs=500,
-                                                 batch_size=32,
-                                                 iterations_per_epoch=1000,
-                                                 validation_sims=val_sims)
-    # Validation, Loss Curves
-    f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
-    f.savefig(f"{plot_path}/{model_name}_validation.png")
-
+# Validation, Loss Curves
+f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
+f.savefig(f"{plot_path}/{model_name}_validation.png")
 
 # Computational Adequacy
 num_test = 500
 num_posterior_draws = 10000
-num_params=7
+num_params=11
 
 # Need to test for different Ns, which is what the following code does
 param_samples = np.empty((num_test, num_posterior_draws, num_params))
@@ -221,9 +335,11 @@ for i in range(num_test):
 print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
     (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
 
+
 # BayesFlow native recovery plot
 fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-    ['mu_drift', 'boundary', 'beta', 'tau', 'eta', 'mu_dc', 'dc_var'])
+    ['mu_drift', 'boundary', 'beta', 'tau', 'eta', 'mu_dc', 'dc_var', 'gamma_dc1',
+    'gamma_dr2', 'sigma1', 'sigma2'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
@@ -319,3 +435,82 @@ plt.ylabel('Posterior')
 plt.title('Diffusion coefficient variability')
 plt.savefig(f'{plot_path}/{model_name}_DC_variability.png')
 plt.close()
+
+
+plt.figure()
+recovery(param_samples[:, :, 7, None],
+    true_params[:, 7].squeeze())
+plt.ylim(-3.0, 3.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Effect of DC on EEG1')
+plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_EEG1.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[:, :, 8, None],
+    true_params[:, 8].squeeze())
+plt.ylim(-3.0, 3.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Effect of drift on EEG2')
+plt.savefig(f'{plot_path}/{model_name}_Effect_of_drift_EEG2.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[:, :, 9, None],
+    true_params[:, 9].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('EEG1 variance not related to cognition')
+plt.savefig(f'{plot_path}/{model_name}_EEG1Noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[:, :, 10, None],
+    true_params[:, 10].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('EEG2 variance not related to cognition')
+plt.savefig(f'{plot_path}/{model_name}_EEG2Noise.png')
+plt.close()
+
+
+# By default plot only the first 12 random posterior draws
+plot_posterior2d(param_samples[0:12, :, 5].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Diffusion coefficient', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
+
+plot_posterior2d(param_samples[0:12, :, 0].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Drift rate', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift.png")
+
+plot_posterior2d(param_samples[0:12, :, 5].squeeze(),
+    param_samples[0:12, :, 0].squeeze(),
+   ['Diffusion coefficient', 'Drift rate'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc.png")
+
+plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
+    param_samples[0:12, :, 0].squeeze(),
+   ['Non-decision time', 'Drift rate'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt.png")
+
+plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Non-decision time', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt.png")
+
+plot_posterior2d(param_samples[0:12, :, 2].squeeze(),
+    param_samples[0:12, :, 1].squeeze(),
+   ['Start point', 'Boundary'],
+   font_size=16, alpha=0.25)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start.png")
