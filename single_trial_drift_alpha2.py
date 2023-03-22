@@ -26,7 +26,7 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-num_epochs = 1
+num_epochs = 500
 view_simulation = False
 
 # Get the filename of the currently running script

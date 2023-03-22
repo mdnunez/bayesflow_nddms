@@ -98,10 +98,10 @@ def diffusion_trial(mu_drift, mu_alpha, beta, tau, eta, dc, var_alpha,
 	gamma_bd1, gamma_dr2, sigma1, sigma2, dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
-    # trial-to-trial drift rate variability
+    # trial-to-trial drift rate
     drift_trial = mu_drift + eta * np.random.normal()
 
-    # trial-to-trial diffusion coefficient variability
+    # trial-to-trial boundary
     while True:
         bound_trial = mu_alpha + var_alpha * np.random.normal()
         if bound_trial>0:

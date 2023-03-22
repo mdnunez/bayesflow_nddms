@@ -105,10 +105,10 @@ def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
     n_steps = 0.
     evidence = boundary * beta
    
-    # trial-to-trial drift rate variability
+    # trial-to-trial drift rate
     drift_trial = mu_drift + eta * np.random.normal()
 
-    # trial-to-trial diffusion coefficient variability
+    # trial-to-trial diffusion coefficient
     while True:
         dc_trial = mu_dc + dc_var * np.random.normal()
         if dc_trial>0:
