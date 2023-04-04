@@ -10,7 +10,7 @@
 #dos2unix bayesflow_nddms.sh && sbatch bayesflow_nddms.sh
 
 # Model to run
-model="single_trial_alpha_dc"
+model="basic_ddm_eta_dc"
 
 # Echo for first slurm output check
 echo -e "Running script $model.py"
@@ -18,6 +18,7 @@ echo -e "Running script $model.py"
 #Loading modules
 module load 2022
 module load Python/3.10.4-GCCcore-11.3.0
+module load TensorFlow/2.11.0-foss-2022a-CUDA-11.7.0 # Does this help?
 
 # Now follow these steps
 # https://github.com/stefanradev93/BayesFlow/blob/master/INSTALL.rst

@@ -2,16 +2,14 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 19-March-23     Michael Nunez      Adaptation of single_trial_drift_dc5
-#  with increased prior range for noise in EEG to allow for models without EEG relationships
-# 20-March-23     Michael Nunez         Automatically obtain model name from script name
+# 23-March-23     Michael Nunez      Adaptation of single_trial_drift2
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 2) Test if parameter standardization in configurator is useful
+# 1) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -26,7 +24,7 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-num_epochs = 1
+num_epochs = 500
 view_simulation = False
 
 # Get the filename of the currently running script
@@ -55,112 +53,70 @@ RNG = np.random.default_rng(2023)
 np.set_printoptions(suppress=True)
 def draw_prior():
 
-    # mu_drift ~ N(0, 2.0), mean drift rate
+    # mu_drift ~ N(0, 2.0), mean drift rate, index 0
     mu_drift = RNG.normal(0.0, 2.0)
 
-    # alpha ~ N(1.0, 0.5) in [0, 10], boundary
+    # alpha ~ N(1.0, 0.5) in [0, 10], boundary, index 1
     alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # beta ~ Beta(2.0, 2.0), relative start point
+    # beta ~ Beta(2.0, 2.0), relative start point, index 2
     beta = RNG.beta(2.0, 2.0)
 
-    # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time
+    # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time, index 3
     ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
 
-    # eta ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in drift
+    # eta ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in drift, index 4
     eta = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
 
-    # mu_dc ~ N(1.0, 0.5) in [0, 10], mean diffusion coefficient
-    mu_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+    #dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient, index 5
+    dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # var_dc ~ N(1.0, 0.5) in [0, 3], trial-to-trial variability in diffusion coefficient
-    var_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
-
-    # gamma_dr1 = 1 Fixed effect of single-trial drift rate on EEG1
-
-    # gamma_dc1 ~ N(0, 1.0), Effect of single-trial diffusion coefficient on EEG1
-    gamma_dc1 = RNG.normal(0.0, 1.0)
-
-    # gamma_dr2 ~ N(0, 1.0), Effect of single-trial drift rate on EEG2
-    gamma_dr2 = RNG.normal(0.0, 1.0)
-
-    # gamma_dc2 = 1, Fixed effect of single-trial diffusion coefficient on EEG2
-
-    # sigma1 ~ U(0.0, 5.0),measurement noise of EEG1
-    sigma1 = RNG.uniform(0.0, 5.0)
-
-    # sigma2 ~ U(0.0, 5.0),measurement noise of EEG2
-    sigma2 = RNG.uniform(0.0, 5.0)
-
-    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, mu_dc, var_dc, gamma_dc1,
-        gamma_dr2, sigma1, sigma2))
+    p_samples = np.hstack((mu_drift, alpha, beta, ter, eta, dc))
     return p_samples
 
 
+num_params = draw_prior().shape[0]
+
 @njit
-def diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var,
-	gamma_dc1, gamma_dr2, sigma1, sigma2, dt=.01, max_steps=400.):
+def diffusion_trial(mu_drift, alpha, beta, ter, eta, dc, dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
     n_steps = 0.
-    evidence = boundary * beta
+    evidence = alpha * beta
    
     # trial-to-trial drift rate
     drift_trial = mu_drift + eta * np.random.normal()
-
-    # trial-to-trial diffusion coefficient
-    while True:
-        dc_trial = mu_dc + dc_var * np.random.normal()
-        if dc_trial>0:
-            break
    
     # Simulate a single DM path
-    while ((evidence > 0) and (evidence < boundary) and (n_steps < max_steps)):
+    while ((evidence > 0) and (evidence < alpha) and (n_steps < max_steps)):
 
         # DDM equation
-        evidence += drift_trial*dt + np.sqrt(dt) * dc_trial * np.random.normal()
+        evidence += drift_trial*dt + np.sqrt(dt) * dc * np.random.normal()
 
         # Increment step
         n_steps += 1.0
 
-    rt = n_steps * dt
+    rt = n_steps * dt + ter
 
-   
-    # EEG1
-    temp_eeg1 = np.random.normal(1*drift_trial + gamma_dc1*dc_trial, sigma1)
-    # Observe only standardized measures
-    mu_eeg1 = 1*mu_drift + gamma_dc1*mu_dc
-    var_eeg1 = eta**2 + (gamma_dc1**2 * dc_var**2) + sigma1**2
-    eeg1 = (temp_eeg1 - mu_eeg1) / np.sqrt(var_eeg1)
-
-    # EEG2
-    temp_eeg2 = np.random.normal(gamma_dr2*drift_trial + 1*dc_trial, sigma2)
-    # Observe only standardized measures
-    mu_eeg2 = gamma_dr2*mu_drift + mu_dc
-    var_eeg2 = (gamma_dr2**2 * eta**2) + dc_var**2 + sigma2**2
-    eeg2 = (temp_eeg2 - mu_eeg2) / np.sqrt(var_eeg2)
-
-  
-    if evidence >= boundary:
-        choicert =  tau + rt  
+    if evidence >= alpha:
+        choice =  1  # choice A
     elif evidence <= 0:
-        choicert = -tau - rt
+        choice = -1  # choice B
     else:
         choicert = 0  # This indicates a missing response
-    return choicert, eeg1, eeg2
+    return rt, choice
 
 @njit
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    mu_drift, boundary, beta, tau, eta, mu_dc, dc_var, gamma_dc1, gamma_dr2, sigma1, sigma2 = params
-    choicert = np.empty(n_trials)
-    z1 = np.empty(n_trials)
-    z2 = np.empty(n_trials)
+    mu_drift, alpha, beta, ter, eta, dc = params
+    rt = np.empty(n_trials)
+    choice = np.empty(n_trials)
     for i in range(n_trials):
-        choicert[i], z1[i], z2[i] = diffusion_trial(mu_drift, boundary, beta, tau, eta, mu_dc, dc_var, gamma_dc1, gamma_dr2, sigma1, sigma2)
+        rt[i], choice[i] = diffusion_trial(mu_drift, alpha, beta, ter, eta, dc)
    
-    sim_data = np.stack((choicert, z1, z2), axis=-1)
+    sim_data = np.stack((rt, choice), axis=-1)
     return sim_data
 
 
@@ -205,39 +161,14 @@ if view_simulation:
 
 
     # Need to test for different Ns, which is what the following code does
-    eeg1_means =np.empty((num_test))
-    eeg1_vars = np.empty((num_test))
-    eeg2_means =np.empty((num_test))
-    eeg2_vars = np.empty((num_test))
     rt_means = np.empty((num_test))
     choice_means = np.empty((num_test))
     np.random.seed(2023) # Set the random seed to generate the same plots every time
     for i in range(num_test):
         raw_sims = generative_model(1)
         these_sims = raw_sims['sim_data']
-        eeg1_means[i] = np.mean(np.squeeze(these_sims[0, :, 1]))
-        eeg1_vars[i] = np.var(np.squeeze(these_sims[0, :, 1]))
-        eeg2_means[i] = np.mean(np.squeeze(these_sims[0, :, 2]))
-        eeg2_vars[i] = np.var(np.squeeze(these_sims[0, :, 2]))
         rt_means[i] = np.mean(np.abs(np.squeeze(these_sims[0,:, 0])))
-        choice_means[i] = np.mean(.5 + .5*np.sign(np.squeeze(these_sims[0,:, 0]))) #convert [1, -1] to [1, 0]
-
-
-    # This should include a large mass around 0
-    plt.figure()
-    sns.kdeplot(eeg1_means)
-
-    # This should include a large mass around 1
-    plt.figure()
-    sns.kdeplot(eeg1_vars)
-
-    # This should include a large mass around 0
-    plt.figure()
-    sns.kdeplot(eeg2_means)
-
-    # This should include a large mass around 1
-    plt.figure()
-    sns.kdeplot(eeg2_vars)
+        choice_means[i] = np.mean(.5 + .5*np.squeeze(these_sims[0,:, 1])) #convert [1, -1] to [1, 0]
 
     plt.figure()
     sns.kdeplot(rt_means)
@@ -245,17 +176,8 @@ if view_simulation:
     plt.figure()
     sns.kdeplot(choice_means)
 
-    # This should usually be standard normal
-    plt.figure()
-    sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
-
-    # This should usually be standard normal
-    plt.figure()
-    sns.kdeplot(np.squeeze(these_sims[0, :, 2]))
-
-
-    sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
-    sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    sim_rts = np.squeeze(these_sims[0, :, 0])
+    sim_choices = np.squeeze(these_sims[0,:, 1])
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == 1])
@@ -273,7 +195,7 @@ if view_simulation:
 
 # BayesFlow Setup
 summary_net = bf.networks.InvariantNetwork()
-inference_net = bf.networks.InvertibleNetwork(num_params=11)
+inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
@@ -318,7 +240,6 @@ f.savefig(f"{plot_path}/{model_name}_validation.png")
 # Computational Adequacy
 num_test = 500
 num_posterior_draws = 10000
-num_params=11
 
 # Need to test for different Ns, which is what the following code does
 param_samples = np.empty((num_test, num_posterior_draws, num_params))
@@ -338,19 +259,16 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
 
 # BayesFlow native recovery plot
 fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-    ['mu_drift', 'boundary', 'beta', 'tau', 'eta', 'mu_dc', 'dc_var', 'gamma_dc1',
-    'gamma_dr2', 'sigma1', 'sigma2'])
+    ['mu_drift', 'alpha', 'beta', 'ter', 'eta', 'dc', 'sigma1'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
 # Posterior means
 param_means = param_samples.mean(axis=1)
 
-# Find the index of clearly good posterior means (inside the prior range)
-# converged = (np.all(np.abs(param_means) < 5, axis=1))
-converged = (np.all(np.abs(param_means) < 5, axis=1)) & (param_means[:, 3] > 0) & \
- (param_means[:, 3] < 1) & (param_means[:, 1] < 2)
-print('%d of %d model fits were in the prior range for all parameters' % 
+# Find the index of clearly good posterior means of tau (inside the prior range)
+converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
+print('%d of %d model fits were in the prior range for non-decision time' % 
     (np.sum(converged), converged.shape[0]))
 
 
@@ -361,8 +279,6 @@ recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
 plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.pdf")
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.svg")
 
 # Plot the results
 plt.figure()
@@ -426,91 +342,92 @@ plt.title('Diffusion coefficient')
 plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
-plt.figure()
-recovery(param_samples[:, :, 6, None],
-    true_params[:, 6].squeeze())
-plt.ylim(0.0, 2.5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Diffusion coefficient variability')
-plt.savefig(f'{plot_path}/{model_name}_DC_variability.png')
-plt.close()
 
+scatter_color = '#ABB0B8'
 
-plt.figure()
-recovery(param_samples[:, :, 7, None],
-    true_params[:, 7].squeeze())
-plt.ylim(-3.0, 3.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Effect of DC on EEG1')
-plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_EEG1.png')
-plt.close()
-
-plt.figure()
-recovery(param_samples[:, :, 8, None],
-    true_params[:, 8].squeeze())
-plt.ylim(-3.0, 3.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Effect of drift on EEG2')
-plt.savefig(f'{plot_path}/{model_name}_Effect_of_drift_EEG2.png')
-plt.close()
-
-plt.figure()
-recovery(param_samples[:, :, 9, None],
-    true_params[:, 9].squeeze())
-plt.ylim(0.0, 1.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('EEG1 variance not related to cognition')
-plt.savefig(f'{plot_path}/{model_name}_EEG1Noise.png')
-plt.close()
-
-plt.figure()
-recovery(param_samples[:, :, 10, None],
-    true_params[:, 10].squeeze())
-plt.ylim(0.0, 1.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('EEG2 variance not related to cognition')
-plt.savefig(f'{plot_path}/{model_name}_EEG2Noise.png')
-plt.close()
-
-
-# By default plot only the first 12 random posterior draws
-plot_posterior2d(param_samples[0:12, :, 5].squeeze(),
-    param_samples[0:12, :, 1].squeeze(),
+# By default plot only the first 18 random posterior draws
+nplots = 18
+plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
+    param_samples[0:nplots, :, 1].squeeze(),
    ['Diffusion coefficient', 'Boundary'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
 
-plot_posterior2d(param_samples[0:12, :, 0].squeeze(),
-    param_samples[0:12, :, 1].squeeze(),
+plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
+    param_samples[0:nplots, :, 1].squeeze(),
    ['Drift rate', 'Boundary'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift.png")
 
-plot_posterior2d(param_samples[0:12, :, 5].squeeze(),
-    param_samples[0:12, :, 0].squeeze(),
+plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
+    param_samples[0:nplots, :, 0].squeeze(),
    ['Diffusion coefficient', 'Drift rate'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc.png")
 
-plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
-    param_samples[0:12, :, 0].squeeze(),
+plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
+    param_samples[0:nplots, :, 0].squeeze(),
    ['Non-decision time', 'Drift rate'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt.png")
 
-plot_posterior2d(param_samples[0:12, :, 3].squeeze(),
-    param_samples[0:12, :, 1].squeeze(),
+plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
+    param_samples[0:nplots, :, 1].squeeze(),
    ['Non-decision time', 'Boundary'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt.png")
 
-plot_posterior2d(param_samples[0:12, :, 2].squeeze(),
-    param_samples[0:12, :, 1].squeeze(),
+plot_posterior2d(param_samples[0:nplots, :, 2].squeeze(),
+    param_samples[0:nplots, :, 1].squeeze(),
    ['Start point', 'Boundary'],
-   font_size=16, alpha=0.25)
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start.png")
+
+appendix_text = rf"""
+The mean and standard deviation of number of simulated trials were $
+{int(np.mean(simulated_trial_nums[0:nplots]))} \pm {int(np.std(simulated_trial_nums[0:nplots]))}$.
+"""
+
+print(appendix_text)
+
+# Plot a 3D joint posterior
+fig = plt.figure(figsize=(10,10))
+ax = fig.add_subplot(111, projection='3d')
+
+main_color = '#332288'
+secondary_color = '#ABB0B8'
+
+# By default plot only one random posterior draws, draw 7
+rand_draw = 13
+
+# Main 3D scatter plot
+ax.scatter(param_samples[rand_draw, :, 0].squeeze(),
+           param_samples[rand_draw, :, 1].squeeze(),
+           param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=main_color)
+
+# 2D scatter plot for drift rate and boundary (xy plane) at min diffusion coefficient
+min_dc = param_samples[rand_draw, :, 5].min()
+ax.scatter(param_samples[rand_draw, :, 0].squeeze(), param_samples[rand_draw, :, 1].squeeze(), 
+    min_dc, alpha=0.25, color=secondary_color)
+
+# 2D scatter plot for drift rate and diffusion coefficient (xz plane) at max boundary
+max_boundary = param_samples[rand_draw, :, 1].max()
+ax.scatter(param_samples[rand_draw, :, 0].squeeze(), max_boundary, 
+    param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=secondary_color)
+
+# 2D scatter plot for boundary and diffusion coefficient (yz plane) at min drift rate
+min_drift_rate = param_samples[rand_draw, :, 0].min()
+ax.scatter(min_drift_rate, param_samples[rand_draw, :, 1].squeeze(), 
+    param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=secondary_color)
+
+ax.set_xlabel(r'Drift rate ($\delta$)', fontsize=16, labelpad=10)
+ax.set_ylabel(r'Boundary ($\alpha$)', fontsize=16, labelpad=10)
+ax.set_zlabel(r'Diffusion coefficient ($\varsigma$)', fontsize=16, labelpad=10)
+
+# Rotate the plot slightly clockwise around the z-axis
+elevation = 20  # Default elevation
+azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
+ax.view_init(elev=elevation, azim=azimuth)
+
+plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
+    bbox_inches="tight", pad_inches=0.5)
