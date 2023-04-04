@@ -8,7 +8,7 @@ Repository for fitting Drift-Diffusion models with identifiable within-trial noi
 
 [Python 3 and Scientific Python libraries](https://www.anaconda.com/products/individual)
 
-[BayesFlow](Pinier_Internship.zip)
+[BayesFlow](https://github.com/stefanradev93/BayesFlow)
 
 ### Downloading
 
