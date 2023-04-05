@@ -209,7 +209,7 @@ def configurator(sim_dict):
 
 
 if view_simulation:
-    # Plot the posterior distributions of choice RTs and EEG data
+    # Plot the distributions of choice RTs and EEG data
     num_test = 5000
 
 
