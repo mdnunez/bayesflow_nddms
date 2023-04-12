@@ -2,11 +2,8 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 20-March-23     Michael Nunez      Conversion from single_trial_drift_alpha2.py
-# 22-March-23   Michael D. Nunez    Insert flag for when fitter is trained, new plots
-# 23-March-23   Michael D. Nunez        Look at recovery under "ideal" conditions
-# 04-April-23   Michael D. Nunez    Plot only high proportion of explained variance samples
-# 12-April-23   Michael D. Nunez     Generate more recovery samples, save out optimal jellyfish plot
+# 12-April-23     Michael Nunez      Conversion from single_trial_alpha_dc.py
+#                    Increase the output of the summary network from 10 to 64
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -32,7 +29,7 @@ from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyf
 
 num_epochs = 500
 view_simulation = False
-train_fitter = False
+train_fitter = True
 
 
 # Get the filename of the currently running script
@@ -284,7 +281,7 @@ if view_simulation:
 
 
 # BayesFlow Setup
-summary_net = bf.networks.InvariantNetwork()
+summary_net = bf.networks.InvariantNetwork(summary_dim=64)
 inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
