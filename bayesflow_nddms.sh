@@ -3,7 +3,7 @@
 #SBATCH -p gpu
 #SBATCH --gpus-per-node=1
 #SBATCH -n 1
-#SBATCH -t 20:00:00
+#SBATCH -t 30:00:00
  
 
 #To run on Snellius (and other servers with SLURM) use:

@@ -7,6 +7,7 @@
 # 23-March-23   Michael D. Nunez        Look at recovery under "ideal" conditions
 # 04-April-23   Michael D. Nunez    Plot only high proportion of explained variance samples
 # 12-April-23   Michael D. Nunez     Generate more recovery samples, save out optimal jellyfish plot
+# 19-April-23     Michael Nunez    Plot only up to 500 in each plot
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -14,8 +15,7 @@
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 1) Simulate from model with 
-# 2) Test if parameter standardization in configurator is useful
+# 1) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -330,7 +330,7 @@ if train_fitter:
 
 
 # Computational Adequacy
-num_test = 5000
+num_test = 12000
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does
@@ -349,11 +349,11 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
     (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
 
 
-# # BayesFlow native recovery plot
-# fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-#     ['mu_drift', 'mu_boundary', 'beta', 'tau', 'eta', 'dc', 'var_boundary', 'gamma_bd1',
-#     'gamma_dr2', 'sigma1', 'sigma2'])
-# fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
+# BayesFlow native recovery plot, plot only up to 500 in each plot
+fig = bf.diagnostics.plot_recovery(param_samples[0:500,:], true_params[0:500,:], param_names =
+    ['mu_drift', 'mu_boundary', 'beta', 'tau', 'eta', 'dc', 'var_boundary', 'gamma_bd1',
+    'gamma_dr2', 'sigma1', 'sigma2'])
+fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
 # Posterior means
@@ -366,8 +366,8 @@ print('%d of %d model fits were in the prior range for non-decision time' %
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
-                  param_means[:, np.array([0, 5, 1, 2, 3])][:, :],
+recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
+                  param_means[:, np.array([0, 5, 1, 2, 3])][0:500, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
@@ -413,8 +413,8 @@ true_data2_cognitive_prop = true_data2_cognitive_var / true_data2_total_var
 # Plot the results
 plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[:, :, 0, None],
-    true_params[:, 0].squeeze())
+recovery(param_samples[0:500, :, 0, None],
+    true_params[0:500, 0].squeeze())
 plt.ylim(-5, 5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -423,8 +423,8 @@ plt.savefig(f'{plot_path}/{model_name}_Drift.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 1, None],
-    true_params[:, 1].squeeze())
+recovery(param_samples[0:500, :, 1, None],
+    true_params[0:500, 1].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -433,8 +433,8 @@ plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 2, None],
-    true_params[:, 2].squeeze())
+recovery(param_samples[0:500, :, 2, None],
+    true_params[0:500, 2].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -443,8 +443,8 @@ plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 3, None],
-    true_params[:, 3].squeeze())
+recovery(param_samples[0:500, :, 3, None],
+    true_params[0:500, 3].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -453,8 +453,8 @@ plt.savefig(f'{plot_path}/{model_name}_NDT.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 4, None],
-    true_params[:, 4].squeeze())
+recovery(param_samples[0:500, :, 4, None],
+    true_params[0:500, 4].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -463,8 +463,8 @@ plt.savefig(f'{plot_path}/{model_name}_boundary_variability.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 5, None],
-    true_params[:, 5].squeeze())
+recovery(param_samples[0:500, :, 5, None],
+    true_params[0:500, 5].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -473,8 +473,8 @@ plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 6, None],
-    true_params[:, 6].squeeze())
+recovery(param_samples[0:500, :, 6, None],
+    true_params[0:500, 6].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -484,8 +484,8 @@ plt.close()
 
 
 plt.figure()
-recovery(param_samples[:, :, 7, None],
-    true_params[:, 7].squeeze())
+recovery(param_samples[0:500, :, 7, None],
+    true_params[0:500, 7].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -494,8 +494,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_data1.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 8, None],
-    true_params[:, 8].squeeze())
+recovery(param_samples[0:500, :, 8, None],
+    true_params[0:500, 8].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -504,8 +504,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_boundary_data2.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 9, None],
-    true_params[:, 9].squeeze())
+recovery(param_samples[0:500, :, 9, None],
+    true_params[0:500, 9].squeeze())
 plt.ylim(0.0, 6.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -514,8 +514,8 @@ plt.savefig(f'{plot_path}/{model_name}_data1Noise.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 10, None],
-    true_params[:, 10].squeeze())
+recovery(param_samples[0:500, :, 10, None],
+    true_params[0:500, 10].squeeze())
 plt.ylim(0.0, 6.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -525,8 +525,8 @@ plt.close()
 
 
 plt.figure()
-recovery(data1_cognitive_prop_samples[:, :, None],
-    true_data1_cognitive_prop)
+recovery(data1_cognitive_prop_samples[0:500, :, None],
+    true_data1_cognitive_prop[0:500])
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -535,8 +535,8 @@ plt.savefig(f'{plot_path}/{model_name}_data1prop_cog.png')
 plt.close()
 
 plt.figure()
-recovery(data2_cognitive_prop_samples[:, :, None],
-    true_data2_cognitive_prop)
+recovery(data2_cognitive_prop_samples[0:500, :, None],
+    true_data2_cognitive_prop[0:500])
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -720,6 +720,181 @@ recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][both_high_cog_sims, :
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
 plt.savefig(f"{plot_path}/{model_name}_recovery_short_high_prop.png")
 
+
+# Plot where the proportion of cognitive variance in the external data is very large
+cutoff_prop = .9
+both_high_cog_sims = np.where((true_data1_cognitive_prop >= cutoff_prop) & \
+    (true_data2_cognitive_prop >= cutoff_prop))[0]
+
+print('%d of %d model simulations had cognitive proportions above %.2f' % 
+    (both_high_cog_sims.size, num_test, cutoff_prop))
+
+# Plot the results
+plt.figure()
+# Use None to add singleton dimension for recovery which expects multiple chains
+recovery(param_samples[both_high_cog_sims, :, 0, None],
+    true_params[both_high_cog_sims, 0].squeeze())
+plt.ylim(-5, 5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Drift')
+plt.savefig(f'{plot_path}/{model_name}_Drift_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 1, None],
+    true_params[both_high_cog_sims, 1].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Boundary')
+plt.savefig(f'{plot_path}/{model_name}_Boundary_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 2, None],
+    true_params[both_high_cog_sims, 2].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Relative Start Point')
+plt.savefig(f'{plot_path}/{model_name}_StartPoint_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 3, None],
+    true_params[both_high_cog_sims, 3].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Non-decision time')
+plt.savefig(f'{plot_path}/{model_name}_NDT_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 4, None],
+    true_params[both_high_cog_sims, 4].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Trial-to-trial variability in boundary')
+plt.savefig(f'{plot_path}/{model_name}_boundary_variability_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 5, None],
+    true_params[both_high_cog_sims, 5].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Diffusion coefficient')
+plt.savefig(f'{plot_path}/{model_name}_DC_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 6, None],
+    true_params[both_high_cog_sims, 6].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Trial-to-trial diffusion coefficient variability')
+plt.savefig(f'{plot_path}/{model_name}_DC_variability_higher_prop.png')
+plt.close()
+
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 7, None],
+    true_params[both_high_cog_sims, 7].squeeze())
+plt.ylim(-3.0, 3.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Effect of boundary on data1')
+plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_data1_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 8, None],
+    true_params[both_high_cog_sims, 8].squeeze())
+plt.ylim(-3.0, 3.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Effect of drift on data2')
+plt.savefig(f'{plot_path}/{model_name}_Effect_of_boundary_data2_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 9, None],
+    true_params[both_high_cog_sims, 9].squeeze())
+plt.ylim(0.0, 6.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('data1 variance not related to cognition')
+plt.savefig(f'{plot_path}/{model_name}_data1Noise_higher_prop.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[both_high_cog_sims, :, 10, None],
+    true_params[both_high_cog_sims, 10].squeeze())
+plt.ylim(0.0, 6.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('data2 variance not related to cognition')
+plt.savefig(f'{plot_path}/{model_name}_data2Noise_higher_prop.png')
+plt.close()
+
+nplots = 18
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 5].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 1].squeeze(),
+   ['Diffusion coefficient', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_higher_prop.png")
+
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 0].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 1].squeeze(),
+   ['Drift rate', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_higher_prop.png")
+
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 5].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 0].squeeze(),
+   ['Diffusion coefficient', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_higher_prop.png")
+
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 3].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 0].squeeze(),
+   ['Non-decision time', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt_higher_prop.png")
+
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 3].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 1].squeeze(),
+   ['Non-decision time', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt_higher_prop.png")
+
+plot_posterior2d(param_samples[both_high_cog_sims[0:nplots], :, 2].squeeze(),
+    param_samples[both_high_cog_sims[0:nplots], :, 1].squeeze(),
+   ['Start point', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start_higher_prop.png")
+
+appendix_text = rf"""
+The mean and standard deviation of number of simulated trials were $
+{int(np.mean(simulated_trial_nums[both_high_cog_sims]))} \pm {int(np.std(simulated_trial_nums[both_high_cog_sims]))}$.
+"""
+
+print(appendix_text)
+
+# Plot true versus estimated for a subset of parameters
+recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][both_high_cog_sims, :],
+                  param_means[:, np.array([0, 5, 1, 2, 3])][both_high_cog_sims, :],
+                  ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
+                  'Start Point', 'Non-Decision Time'],
+                  font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
+plt.savefig(f"{plot_path}/{model_name}_recovery_short_higher_prop.png")
+
+
 # Plot a 3D joint posterior
 fig = plt.figure(figsize=(10,10))
 ax = fig.add_subplot(111, projection='3d')
@@ -769,7 +944,7 @@ plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=
 drift = 3
 
 # mean boundary - index 1
-mu_alpha = 2
+mu_alpha = 1.5
 
 # relative start point - index 2
 beta = .5
@@ -789,10 +964,10 @@ std_dc = 1
 # gamma_bd1 = 1 Fixed effect of single-trial boundary on extdata1
 
 # Effect of single-trial diffusion coefficient on extdata1 - index 7
-gamma_dc1 = 2
+gamma_dc1 = 3
 
 # gamma_bd2 ~ N(0, 1.0), Effect of single-trial boundary on extdata2 - index 8
-gamma_bd2 = 0
+gamma_bd2 = 3
 
 # gamma_dc2 = 1, Fixed effect of single-trial diffusion coefficient on extdata2
 

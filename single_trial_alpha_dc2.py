@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # 12-April-23     Michael Nunez      Conversion from single_trial_alpha_dc.py
 #                    Increase the output of the summary network from 10 to 64
+# 19-April-23     Michael Nunez    Plot only up to 500 in each plot
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -11,8 +12,7 @@
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # To do:
-# 1) Simulate from model with 
-# 2) Test if parameter standardization in configurator is useful
+# 1) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -29,7 +29,7 @@ from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyf
 
 num_epochs = 500
 view_simulation = False
-train_fitter = True
+train_fitter = False
 
 
 # Get the filename of the currently running script
@@ -327,7 +327,7 @@ if train_fitter:
 
 
 # Computational Adequacy
-num_test = 5000
+num_test = 500
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does
@@ -346,11 +346,11 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
     (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
 
 
-# # BayesFlow native recovery plot
-# fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-#     ['mu_drift', 'mu_boundary', 'beta', 'tau', 'eta', 'dc', 'var_boundary', 'gamma_bd1',
-#     'gamma_dr2', 'sigma1', 'sigma2'])
-# fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
+# BayesFlow native recovery plot, plot only up to 500 in each plot
+fig = bf.diagnostics.plot_recovery(param_samples[0:500,:], true_params[0:500,:], param_names =
+    ['mu_drift', 'mu_boundary', 'beta', 'tau', 'eta', 'dc', 'var_boundary', 'gamma_bd1',
+    'gamma_dr2', 'sigma1', 'sigma2'])
+fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
 # Posterior means
@@ -363,8 +363,8 @@ print('%d of %d model fits were in the prior range for non-decision time' %
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][:, :],
-                  param_means[:, np.array([0, 5, 1, 2, 3])][:, :],
+recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
+                  param_means[:, np.array([0, 5, 1, 2, 3])][0:500, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
@@ -410,8 +410,8 @@ true_data2_cognitive_prop = true_data2_cognitive_var / true_data2_total_var
 # Plot the results
 plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[:, :, 0, None],
-    true_params[:, 0].squeeze())
+recovery(param_samples[0:500, :, 0, None],
+    true_params[0:500, 0].squeeze())
 plt.ylim(-5, 5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -420,8 +420,8 @@ plt.savefig(f'{plot_path}/{model_name}_Drift.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 1, None],
-    true_params[:, 1].squeeze())
+recovery(param_samples[0:500, :, 1, None],
+    true_params[0:500, 1].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -430,8 +430,8 @@ plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 2, None],
-    true_params[:, 2].squeeze())
+recovery(param_samples[0:500, :, 2, None],
+    true_params[0:500, 2].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -440,8 +440,8 @@ plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 3, None],
-    true_params[:, 3].squeeze())
+recovery(param_samples[0:500, :, 3, None],
+    true_params[0:500, 3].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -450,8 +450,8 @@ plt.savefig(f'{plot_path}/{model_name}_NDT.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 4, None],
-    true_params[:, 4].squeeze())
+recovery(param_samples[0:500, :, 4, None],
+    true_params[0:500, 4].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -460,8 +460,8 @@ plt.savefig(f'{plot_path}/{model_name}_boundary_variability.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 5, None],
-    true_params[:, 5].squeeze())
+recovery(param_samples[0:500, :, 5, None],
+    true_params[0:500, 5].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -470,8 +470,8 @@ plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 6, None],
-    true_params[:, 6].squeeze())
+recovery(param_samples[0:500, :, 6, None],
+    true_params[0:500, 6].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -481,8 +481,8 @@ plt.close()
 
 
 plt.figure()
-recovery(param_samples[:, :, 7, None],
-    true_params[:, 7].squeeze())
+recovery(param_samples[0:500, :, 7, None],
+    true_params[0:500, 7].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -491,8 +491,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_DC_data1.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 8, None],
-    true_params[:, 8].squeeze())
+recovery(param_samples[0:500, :, 8, None],
+    true_params[0:500, 8].squeeze())
 plt.ylim(-3.0, 3.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -501,8 +501,8 @@ plt.savefig(f'{plot_path}/{model_name}_Effect_of_boundary_data2.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 9, None],
-    true_params[:, 9].squeeze())
+recovery(param_samples[0:500, :, 9, None],
+    true_params[0:500, 9].squeeze())
 plt.ylim(0.0, 6.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -511,8 +511,8 @@ plt.savefig(f'{plot_path}/{model_name}_data1Noise.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 10, None],
-    true_params[:, 10].squeeze())
+recovery(param_samples[0:500, :, 10, None],
+    true_params[0:500, 10].squeeze())
 plt.ylim(0.0, 6.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -522,8 +522,8 @@ plt.close()
 
 
 plt.figure()
-recovery(data1_cognitive_prop_samples[:, :, None],
-    true_data1_cognitive_prop)
+recovery(data1_cognitive_prop_samples[0:500, :, None],
+    true_data1_cognitive_prop[0:500])
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -532,8 +532,8 @@ plt.savefig(f'{plot_path}/{model_name}_data1prop_cog.png')
 plt.close()
 
 plt.figure()
-recovery(data2_cognitive_prop_samples[:, :, None],
-    true_data2_cognitive_prop)
+recovery(data2_cognitive_prop_samples[0:500, :, None],
+    true_data2_cognitive_prop[0:500])
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')

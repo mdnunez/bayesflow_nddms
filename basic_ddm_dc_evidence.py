@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # 18-April-2023   Michael Nunez   Converted from basic_ddm_dc.py with noisy correlates of the evidence path
 #                                 More time resolution in the diffusion_trial simulator
+# 19-April-2023   Michael Nunez           Plot only up to 500 in each plot
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -246,7 +247,7 @@ inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
-# If the checkpoint path does not exist, create it
+# Let BayesFlow create the checkpoint path to avoid the no memory.pkl error
 checkpoint_path = f"checkpoint/{model_name}"
 
 # We need to pass the custom configurator here
@@ -287,7 +288,7 @@ if train_fitter:
 
 
 # Computational Adequacy
-num_test = 500
+num_test = 10000
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does
@@ -305,8 +306,8 @@ for i in range(num_test):
 print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
     (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
 
-# BayesFlow native recovery plot
-fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
+# BayesFlow native recovery plot, plot only up to 500 in each plot
+fig = bf.diagnostics.plot_recovery(param_samples[0:500,:], true_params[0:500,:], param_names =
     ['drift', 'boundary', 'beta', 'tau', 'dc', 'sigma1'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
@@ -321,8 +322,8 @@ print('%d of %d model fits were in the prior range for non-decision time' %
 
 
 # Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][:, :],
-                  param_means[:, np.array([0, 4, 1, 2, 3])][:, :],
+recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][0:500, :],
+                  param_means[:, np.array([0, 4, 1, 2, 3])][0:500, :],
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
@@ -331,8 +332,8 @@ plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
 # Plot the results
 plt.figure()
 # Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[:, :, 0, None],
-    true_params[:, 0].squeeze())
+recovery(param_samples[0:500, :, 0, None],
+    true_params[0:500, 0].squeeze())
 plt.ylim(-6, 6)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -341,8 +342,8 @@ plt.savefig(f'{plot_path}/{model_name}_Drift.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 1, None],
-    true_params[:, 1].squeeze())
+recovery(param_samples[0:500, :, 1, None],
+    true_params[0:500, 1].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -351,8 +352,8 @@ plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 2, None],
-    true_params[:, 2].squeeze())
+recovery(param_samples[0:500, :, 2, None],
+    true_params[0:500, 2].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -361,8 +362,8 @@ plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 3, None],
-    true_params[:, 3].squeeze())
+recovery(param_samples[0:500, :, 3, None],
+    true_params[0:500, 3].squeeze())
 plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -371,8 +372,8 @@ plt.savefig(f'{plot_path}/{model_name}_NDT.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 4, None],
-    true_params[:, 4].squeeze())
+recovery(param_samples[0:500, :, 4, None],
+    true_params[0:500, 4].squeeze())
 plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -381,8 +382,8 @@ plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
 plt.figure()
-recovery(param_samples[:, :, 5, None],
-    true_params[:, 5].squeeze())
+recovery(param_samples[0:500, :, 5, None],
+    true_params[0:500, 5].squeeze())
 plt.ylim(0.0, 5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
@@ -478,3 +479,119 @@ ax.view_init(elev=elevation, azim=azimuth)
 
 plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
     bbox_inches="tight", pad_inches=0.5)
+
+# Find true samples with small measurement variance
+noise_cutoff = .25
+low_noise = np.where(true_params[:, 5] < noise_cutoff)[0]
+
+print('%d of %d model simulations had measurement noise below %.2f' % 
+    (low_noise.size, num_test, noise_cutoff))
+
+
+# Plot true versus estimated for a subset of parameters
+recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][low_noise, :],
+                  param_means[:, np.array([0, 4, 1, 2, 3])][low_noise, :],
+                  ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
+                  'Start Point', 'Non-Decision Time'],
+                  font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
+plt.savefig(f"{plot_path}/{model_name}_recovery_short_low_noise.png")
+
+# Plot the results
+plt.figure()
+# Use None to add singleton dimension for recovery which expects multiple chains
+recovery(param_samples[low_noise, :, 0, None],
+    true_params[low_noise, 0].squeeze())
+plt.ylim(-6, 6)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Drift')
+plt.savefig(f'{plot_path}/{model_name}_Drift_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 1, None],
+    true_params[low_noise, 1].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Boundary')
+plt.savefig(f'{plot_path}/{model_name}_Boundary_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 2, None],
+    true_params[low_noise, 2].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Relative Start Point')
+plt.savefig(f'{plot_path}/{model_name}_StartPoint_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 3, None],
+    true_params[low_noise, 3].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Non-decision time')
+plt.savefig(f'{plot_path}/{model_name}_NDT_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 4, None],
+    true_params[low_noise, 4].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Diffusion coefficient')
+plt.savefig(f'{plot_path}/{model_name}_DC_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 5, None],
+    true_params[low_noise, 5].squeeze())
+plt.ylim(0.0, 5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Measurement noise in evidence path')
+plt.savefig(f'{plot_path}/{model_name}_measurement_noise_low_noise.png')
+plt.close()
+
+# By default plot only the first 18 random posterior draws
+nplots = 18
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 4].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Diffusion coefficient', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 0].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Drift rate', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 4].squeeze(),
+    param_samples[low_noise[0:nplots], :, 0].squeeze(),
+   ['Diffusion coefficient', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 3].squeeze(),
+    param_samples[low_noise[0:nplots], :, 0].squeeze(),
+   ['Non-decision time', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 3].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Non-decision time', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 2].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Start point', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start_low_noise.png")
