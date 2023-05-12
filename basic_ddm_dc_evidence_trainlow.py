@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # 09-May-2023   Michael Nunez   Converted from basic_ddm_dc_evidence, 
 #                             Same model trained only on small observation noise
+# 12-May-2023   Michael Nunez   Plot joint posteriors of DC and measurement noise, load pre-trained network
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -30,7 +31,7 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-train_fitter = True
+train_fitter = False
 num_epochs = 500
 view_simulation = False
 
@@ -261,14 +262,6 @@ trainer = bf.trainers.Trainer(
 # Instead it should say something like "Networks loaded from checkpoint/ckpt-1000"
 
 
-"""Create validation simulations with some random N, if specific N is desired, need to 
-call simulator explicitly or define it with keyword arguments which can control behavior
-All trainer.train_*** can take additional keyword arguments controling the behavior of
-configurators, generative models and networks"""
-num_val = 300
-val_sims = generative_model(num_val)
-
-
 # If the recovery plot path does not exist, create it
 plot_path = f"recovery_plots/{model_name}"
 if not os.path.exists(plot_path):
@@ -276,6 +269,13 @@ if not os.path.exists(plot_path):
 
 
 if train_fitter:
+    """Create validation simulations with some random N, if specific N is desired, need to 
+    call simulator explicitly or define it with keyword arguments which can control behavior
+    All trainer.train_*** can take additional keyword arguments controling the behavior of
+    configurators, generative models and networks"""
+    num_val = 300
+    val_sims = generative_model(num_val)
+
     # Experience-replay training
     losses = trainer.train_experience_replay(epochs=num_epochs,
                                                  batch_size=32,
@@ -284,10 +284,12 @@ if train_fitter:
     # Validation, Loss Curves
     f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
     f.savefig(f"{plot_path}/{model_name}_validation.png")
+else:
+    status = trainer.load_pretrained_network()
 
 
 # Computational Adequacy
-num_test = 10000
+num_test = 500
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does
@@ -399,6 +401,12 @@ plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
    ['Diffusion coefficient', 'Boundary'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
+
+plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
+    param_samples[0:nplots, :, 5].squeeze(),
+   ['Diffusion coefficient', 'Measurement noise'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_noise_dc.png")
 
 plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
     param_samples[0:nplots, :, 1].squeeze(),

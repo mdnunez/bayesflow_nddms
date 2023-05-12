@@ -8,6 +8,7 @@
 # 04-April-23   Michael D. Nunez    Plot only high proportion of explained variance samples
 # 12-April-23   Michael D. Nunez     Generate more recovery samples, save out optimal jellyfish plot
 # 19-April-23     Michael Nunez    Plot only up to 500 in each plot
+# 12-May-2023   Michael Nunez   Load pre-trained network
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -304,20 +305,20 @@ trainer = bf.trainers.Trainer(
 # Instead it should say something like "Networks loaded from checkpoint/ckpt-1000"
 
 
-"""Create validation simulations with some random N, if specific N is desired, need to 
-call simulator explicitly or define it with keyword arguments which can control behavior
-All trainer.train_*** can take additional keyword arguments controling the behavior of
-configurators, generative models and networks"""
-num_val = 300
-val_sims = generative_model(num_val)
-
-
 # If the recovery plot path does not exist, create it
 plot_path = f"recovery_plots/{model_name}"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
+
 if train_fitter:
+    """Create validation simulations with some random N, if specific N is desired, need to 
+    call simulator explicitly or define it with keyword arguments which can control behavior
+    All trainer.train_*** can take additional keyword arguments controling the behavior of
+    configurators, generative models and networks"""
+    num_val = 300
+    val_sims = generative_model(num_val)
+
     # Experience-replay training
     losses = trainer.train_experience_replay(epochs=num_epochs,
                                                  batch_size=32,
@@ -326,6 +327,8 @@ if train_fitter:
     # Validation, Loss Curves
     f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
     f.savefig(f"{plot_path}/{model_name}_validation.png")
+else:
+    status = trainer.load_pretrained_network()
 
 
 

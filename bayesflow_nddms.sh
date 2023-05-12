@@ -10,7 +10,7 @@
 #dos2unix bayesflow_nddms.sh && sbatch bayesflow_nddms.sh
 
 # Model to run
-model="basic_ddm_dc_evidence_trainlow"
+model="single_trial_alpha_dc"
 
 # Echo for first slurm output check
 echo -e "Running script $model.py"
@@ -23,8 +23,11 @@ module load TensorFlow/2.11.0-foss-2022a-CUDA-11.7.0 # Does this help?
 # Now follow these steps
 # https://github.com/stefanradev93/BayesFlow/blob/master/INSTALL.rst
 
-# Install BayesFlow and dependencies form github
-pip install --user git+https://github.com/stefanradev93/bayesflow
+#Copy local BayesFlow to avoid using different package versions
+cp -r $HOME/BayesFlow "$TMPDIR"
+
+# Install BayesFlow and dependencies
+pip install --user "$TMPDIR"/BayesFlow
 
 # Install numba
 pip install --user numba
