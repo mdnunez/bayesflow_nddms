@@ -2,17 +2,13 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 09-May-2023   Michael Nunez   Converted from basic_ddm_dc_evidence, 
-#                             Same model trained only on small observation noise
-# 12-May-2023   Michael Nunez   Plot joint posteriors of DC and measurement noise, load pre-trained network
+# UNFINISHED   Michael Nunez   Converted from basic_ddm_dc_evidence.py
+#   Standardize across trials and not within trials, we expect to be able to observe the same scale across trials
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 # https://docs.python.org/3/library/timeit.html
-
-# To do:
-# 1) Test if parameter standardization in configurator is useful
 
 # Notes:
 # 1) conda activate bf
@@ -29,8 +25,8 @@ import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
 train_fitter = False
-num_epochs = 500
-view_simulation = False
+num_epochs = 1
+view_simulation = True
 
 
 # Get the filename of the currently running script
@@ -74,8 +70,8 @@ def draw_prior():
     # dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient
     dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # sigma1 ~ U(0.0, 0.25),measurement noise of extdata1
-    sigma1 = RNG.uniform(0.0, 0.25)
+    # sigma1 ~ U(0.0, 5.0),measurement noise of extdata1
+    sigma1 = RNG.uniform(0.0, 5.0)
 
     p_samples = np.hstack((drift, alpha, beta, ter, dc, sigma1))
     return p_samples
@@ -94,8 +90,8 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
     evidence = boundary * beta
 
     # Assume noisey correlate of the evidence time course is observed
-    n_eeg_obs = int(.2/dt)
-    erp_path = np.zeros((n_eeg_obs))
+    n_path_obs = int(.2/dt)
+    true_path = np.zeros((n_path_obs))
   
  
     # Simulate a single DM path
@@ -106,8 +102,8 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
 
         # Assume noisey correlate of the evidence time course 
         #is observed for 200 ms at the beginning of an evidence path
-        if n_steps < n_eeg_obs:
-            erp_path[int(n_steps)] = evidence
+        if n_steps < n_path_obs:
+            true_path[int(n_steps)] = evidence
 
         # Increment step
         n_steps += 1.0
@@ -116,13 +112,10 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
     rt = n_steps * dt + tau
 
     # Assume evidence time course stays at the boundary, strong assumption
-    erp_path[int(n_steps):] = evidence
+    true_path[int(n_steps):] = evidence
 
-    # Add noise to observed ERP path
-    erp_path = erp_path + np.random.normal(0, sigma1, size=n_eeg_obs)
-
-    # Standardize the observed ERP path
-    obs_path = (erp_path - np.mean(erp_path))/np.std(erp_path)
+    # Add noise to observed evidence path
+    noise_path = true_path + np.random.normal(0, sigma1, size=n_path_obs)
 
 
     if evidence >= boundary:
@@ -131,7 +124,7 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
         choice = -1  # choice B
     else:
         choice = 0  # This indicates a missing response
-    return rt, choice, obs_path
+    return rt, choice, noise_path
 
 
 
@@ -142,10 +135,13 @@ def simulate_trials(params, n_trials):
     drift, boundary, beta, tau, dc, sigma1 = params
     rt = np.empty((n_trials, 1))
     choice = np.empty((n_trials, 1))
-    obs_path = np.empty((n_trials, 200))
+    noise_path = np.empty((n_trials, 200))
+    path_means = np.empty((n_trials))
     for i in range(n_trials):
-        rt[i], choice[i], obs_path[i, :] = diffusion_trial(drift, boundary, beta, tau, dc, sigma1)
+        rt[i], choice[i], noise_path[i, :] = diffusion_trial(drift, boundary, beta, tau, dc, sigma1)
+        path_means[i] = np.mean(noise_path[i,:])
 
+    obs_path = (noise_path - np.mean(path_means))/np.std(path_means)
     sim_data = np.concatenate((rt, choice, obs_path), axis=1)
     return sim_data
 
@@ -222,6 +218,11 @@ if view_simulation:
 
     sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
     sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    sim_evidence = np.squeeze(these_sims[0,:,2:])
+    # This are the evidence paths from the final simulation
+    plt.figure()
+    plt.plot(np.linspace(0, .2,num=200),sim_evidence.T)
+
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == 1])
@@ -231,6 +232,7 @@ if view_simulation:
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == -1])
 
+    plt.show()
 
     # Minimum RT
     print('The minimum RT is %.3f when the NDT was %.3f' % 
@@ -286,7 +288,7 @@ else:
 
 
 # Computational Adequacy
-num_test = 500
+num_test = 10000
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does
@@ -484,3 +486,118 @@ ax.view_init(elev=elevation, azim=azimuth)
 plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
     bbox_inches="tight", pad_inches=0.5)
 
+# Find true samples with small measurement variance
+noise_cutoff = .25
+low_noise = np.where(true_params[:, 5] < noise_cutoff)[0]
+
+print('%d of %d model simulations had measurement noise below %.2f' % 
+    (low_noise.size, num_test, noise_cutoff))
+
+
+# Plot true versus estimated for a subset of parameters
+recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][low_noise, :],
+                  param_means[:, np.array([0, 4, 1, 2, 3])][low_noise, :],
+                  ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
+                  'Start Point', 'Non-Decision Time'],
+                  font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
+plt.savefig(f"{plot_path}/{model_name}_recovery_short_low_noise.png")
+
+# Plot the results
+plt.figure()
+# Use None to add singleton dimension for recovery which expects multiple chains
+recovery(param_samples[low_noise, :, 0, None],
+    true_params[low_noise, 0].squeeze())
+plt.ylim(-6, 6)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Drift')
+plt.savefig(f'{plot_path}/{model_name}_Drift_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 1, None],
+    true_params[low_noise, 1].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Boundary')
+plt.savefig(f'{plot_path}/{model_name}_Boundary_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 2, None],
+    true_params[low_noise, 2].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Relative Start Point')
+plt.savefig(f'{plot_path}/{model_name}_StartPoint_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 3, None],
+    true_params[low_noise, 3].squeeze())
+plt.ylim(0.0, 1.0)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Non-decision time')
+plt.savefig(f'{plot_path}/{model_name}_NDT_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 4, None],
+    true_params[low_noise, 4].squeeze())
+plt.ylim(0.0, 2.5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Diffusion coefficient')
+plt.savefig(f'{plot_path}/{model_name}_DC_low_noise.png')
+plt.close()
+
+plt.figure()
+recovery(param_samples[low_noise, :, 5, None],
+    true_params[low_noise, 5].squeeze())
+plt.ylim(0.0, 5)
+plt.xlabel('True')
+plt.ylabel('Posterior')
+plt.title('Measurement noise in evidence path')
+plt.savefig(f'{plot_path}/{model_name}_measurement_noise_low_noise.png')
+plt.close()
+
+# By default plot only the first 18 random posterior draws
+nplots = 18
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 4].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Diffusion coefficient', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 0].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Drift rate', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 4].squeeze(),
+    param_samples[low_noise[0:nplots], :, 0].squeeze(),
+   ['Diffusion coefficient', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 3].squeeze(),
+    param_samples[low_noise[0:nplots], :, 0].squeeze(),
+   ['Non-decision time', 'Drift rate'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 3].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Non-decision time', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt_low_noise.png")
+
+plot_posterior2d(param_samples[low_noise[0:nplots], :, 2].squeeze(),
+    param_samples[low_noise[0:nplots], :, 1].squeeze(),
+   ['Start point', 'Boundary'],
+   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start_low_noise.png")

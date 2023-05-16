@@ -18,9 +18,6 @@
 # 2) Do not create checkpoint folder manually, 
 # let BayesFlow do it otherwise get a no memory.pkl error
 
-# Paper reference:
-# Model dcDDM in the manuscript: Nunez, Schubert, Frischkorn, Oberauer 2023.
-
 import os
 import numpy as np
 from scipy.stats import truncnorm
@@ -93,7 +90,7 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1,
     evidence = boundary * beta
 
     # Assume noisey correlate of the evidence time course is observed
-    n_eeg_obs = int(.2/dt)
+    n_eeg_obs = int(.2/dt)  # Asssume 200 ms is observed
     erp_path = np.zeros((n_eeg_obs))
   
  
@@ -285,7 +282,7 @@ else:
 
 
 # Computational Adequacy
-num_test = 10000
+num_test = 500
 num_posterior_draws = 10000
 
 # Need to test for different Ns, which is what the following code does

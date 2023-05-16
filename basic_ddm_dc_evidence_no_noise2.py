@@ -2,9 +2,8 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 09-May-2023   Michael Nunez   Converted from basic_ddm_dc_evidence, 
-#                             Same model trained only on small observation noise
-# 12-May-2023   Michael Nunez   Plot joint posteriors of DC and measurement noise, load pre-trained network
+# 15-May-2023   Michael Nunez   Converted from basic_ddm_evidence_no_noise.py
+#           Increase time window for evidence path from 200 ms to 400 ms
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -28,7 +27,7 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-train_fitter = False
+train_fitter = True
 num_epochs = 500
 view_simulation = False
 
@@ -74,17 +73,14 @@ def draw_prior():
     # dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient
     dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # sigma1 ~ U(0.0, 0.25),measurement noise of extdata1
-    sigma1 = RNG.uniform(0.0, 0.25)
-
-    p_samples = np.hstack((drift, alpha, beta, ter, dc, sigma1))
+    p_samples = np.hstack((drift, alpha, beta, ter, dc))
     return p_samples
 
 
 num_params = draw_prior().shape[0]
 
 @njit
-def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
+def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1,
     dt=.001, max_time=4.):
     """Simulates a trial from the diffusion model."""
 
@@ -94,7 +90,7 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
     evidence = boundary * beta
 
     # Assume noisey correlate of the evidence time course is observed
-    n_eeg_obs = int(.2/dt)
+    n_eeg_obs = int(.4/dt)  # Asssume 400 ms is observed
     erp_path = np.zeros((n_eeg_obs))
   
  
@@ -118,10 +114,11 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
     # Assume evidence time course stays at the boundary, strong assumption
     erp_path[int(n_steps):] = evidence
 
-    # Add noise to observed ERP path
-    erp_path = erp_path + np.random.normal(0, sigma1, size=n_eeg_obs)
+    # Add small noise to observed paths only for computational reasons
+    # E.g avoid 0s given by np.std() below when evidence path quickly reaches boundary
+    erp_path = erp_path + np.random.normal(0, 0.001, size=n_eeg_obs)
 
-    # Standardize the observed ERP path
+    # Standardize the observed EEG path
     obs_path = (erp_path - np.mean(erp_path))/np.std(erp_path)
 
 
@@ -139,12 +136,12 @@ def diffusion_trial(drift=3, boundary=1, beta=.5, tau=.4, dc=1, sigma1=1,
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    drift, boundary, beta, tau, dc, sigma1 = params
+    drift, boundary, beta, tau, dc = params
     rt = np.empty((n_trials, 1))
     choice = np.empty((n_trials, 1))
-    obs_path = np.empty((n_trials, 200))
+    obs_path = np.empty((n_trials, 400)) # Asssume 400 ms is observed
     for i in range(n_trials):
-        rt[i], choice[i], obs_path[i, :] = diffusion_trial(drift, boundary, beta, tau, dc, sigma1)
+        rt[i], choice[i], obs_path[i, :] = diffusion_trial(drift, boundary, beta, tau, dc)
 
     sim_data = np.concatenate((rt, choice, obs_path), axis=1)
     return sim_data
@@ -190,10 +187,9 @@ if view_simulation:
 
 
     # Need to test for different Ns, which is what the following code does
-    erps =np.empty((num_test,200))
+    erps =np.empty((num_test,400))
     rt_means = np.empty((num_test))
     choice_means = np.empty((num_test))
-    low_measurement_noise = np.zeros((num_test), dtype=bool)
     np.random.seed(2023) # Set the random seed to generate the same plots every time
     for i in range(num_test):
         raw_sims = generative_model(1)
@@ -201,18 +197,6 @@ if view_simulation:
         erps[i, :] = np.mean(np.squeeze(these_sims[0, :, 2:]),axis=0)
         rt_means[i] = np.mean(np.abs(np.squeeze(these_sims[0,:, 0])))
         choice_means[i] = np.mean(.5 + .5*np.squeeze(these_sims[0,:, 1])) #convert [1, -1] to [1, 0]
-        if raw_sims['prior_draws'][0,5] <= noise_cutoff:
-            low_measurement_noise[i] = 1
-
-    plt.figure()
-    plt.plot(np.linspace(0, .2,num=200),erps.T)
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Standardized microvolts')
-
-    plt.figure()
-    plt.plot(np.linspace(0, .2,num=200),erps[low_measurement_noise,:].T)
-    plt.xlabel('Time (sec)')
-    plt.ylabel('Standardized microvolts')
 
     plt.figure()
     sns.kdeplot(rt_means)
@@ -222,19 +206,25 @@ if view_simulation:
 
     sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
     sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
+    sim_evidence = np.squeeze(these_sims[0,:,2:])
+    # This are the evidence paths from the final simulation
+    plt.figure()
+    plt.plot(np.linspace(0, .4,num=400),sim_evidence.T)
+
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == 1])
-
 
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == -1])
 
+    plt.show(block=False)
 
     # Minimum RT
     print('The minimum RT is %.3f when the NDT was %.3f' % 
         (np.min(sim_rts[sim_rts != 0]), raw_sims['prior_draws'][0,3]))
+
 
 
 
@@ -306,7 +296,7 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
 
 # BayesFlow native recovery plot, plot only up to 500 in each plot
 fig = bf.diagnostics.plot_recovery(param_samples[0:500,:], true_params[0:500,:], param_names =
-    ['drift', 'boundary', 'beta', 'tau', 'dc', 'sigma1'])
+    ['drift', 'boundary', 'beta', 'tau', 'dc'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
@@ -379,16 +369,6 @@ plt.title('Diffusion coefficient')
 plt.savefig(f'{plot_path}/{model_name}_DC.png')
 plt.close()
 
-plt.figure()
-recovery(param_samples[0:500, :, 5, None],
-    true_params[0:500, 5].squeeze())
-plt.ylim(0.0, 5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Measurement noise in evidence path')
-plt.savefig(f'{plot_path}/{model_name}_measurement_noise.png')
-plt.close()
-
 scatter_color = '#ABB0B8'
 
 # By default plot only the first 18 random posterior draws
@@ -398,12 +378,6 @@ plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
    ['Diffusion coefficient', 'Boundary'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
-
-plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
-    param_samples[0:nplots, :, 5].squeeze(),
-   ['Diffusion coefficient', 'Measurement noise'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_noise_dc.png")
 
 plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
     param_samples[0:nplots, :, 1].squeeze(),

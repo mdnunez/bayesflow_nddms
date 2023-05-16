@@ -125,7 +125,6 @@ def simulate_trials(params, n_trials):
     mu_drift, alpha, beta, ter, eta, dc, sigma1 = params
     choicert = np.empty(n_trials)
     z1 = np.empty(n_trials)
-    z2 = np.empty(n_trials)
     for i in range(n_trials):
         choicert[i], z1[i] = diffusion_trial(mu_drift, alpha, beta, ter, eta, dc, sigma1)
    

@@ -20,9 +20,6 @@
 # 2) Do not create checkpoint folder manually, 
 # let BayesFlow do it otherwise get a no memory.pkl error
 
-# Paper reference:
-# Model dcDDM in the manuscript: Nunez, Schubert, Frischkorn, Oberauer 2023.
-
 import os
 import numpy as np
 from scipy.stats import truncnorm
