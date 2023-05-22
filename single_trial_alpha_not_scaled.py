@@ -23,8 +23,8 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyfish
 
-num_epochs = 1
-view_simulation = True
+num_epochs = 500
+view_simulation = False
 train_fitter = True
 
 
@@ -187,11 +187,9 @@ if view_simulation:
         choice_means[i] = np.mean(.5 + .5*np.sign(np.squeeze(these_sims[0,:, 0]))) #convert [1, -1] to [1, 0]
 
 
-    # This should include a large mass around 0
     plt.figure()
     sns.kdeplot(extdata1_means)
 
-    # This should include a large mass around 1
     plt.figure()
     sns.kdeplot(extdata1_vars)
 
@@ -201,7 +199,6 @@ if view_simulation:
     plt.figure()
     sns.kdeplot(choice_means)
 
-    # This should usually be standard normal
     plt.figure()
     sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
 
