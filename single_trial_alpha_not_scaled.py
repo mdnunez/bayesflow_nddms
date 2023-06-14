@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # 16-May-23     Michael Nunez      Conversion from single_trial_alpha.py
 #                          Assume noisy absolute evidence scale is observed
+# 14-June-23    Michael Nunez                   Add publication text
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -25,7 +26,7 @@ from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyf
 
 num_epochs = 500
 view_simulation = False
-train_fitter = True
+train_fitter = False
 
 
 # Get the filename of the currently running script
@@ -109,6 +110,7 @@ def diffusion_trial(drift, mu_alpha, beta, ter, var_alpha, dc, sigma1,
  
     # Observe absolute measures with noise
     extdata1 = np.random.normal(1*bound_trial, sigma1)
+    #extdata1 = np.random.normal(b * bound_trial, 1)
 
     if evidence >= bound_trial:
         choicert =  ter + rt  
@@ -722,6 +724,15 @@ ax.view_init(elev=elevation, azim=azimuth)
 
 plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
     bbox_inches="tight", pad_inches=0.5)
+
+publication_text = rf"""
+Draws from a joint posterior distribution for one simulated data set from Model dcDDM-$\alpha z$ 
+(purple 3D scatter plot). Pairwise joint distributions are given by the grey projections on each 
+of the three faces. The joint posterior distribution is driven mostly by the joint likelihood of 
+the data (N={int(simulated_trial_nums[rand_draw])}) given the model.  The true 5-dimension joint posterior distribution also includes
+the relative start point and non-decision time. The mean posteriors of those two parameters were 
+$\hat\tau={np.mean(param_samples[rand_draw, :, 3]):.3}$ seconds and $\hat\beta={np.mean(param_samples[rand_draw, :, 2]):.2f}$ proportion of boundary in this simulation respectively.
+"""
 
 
 # Simulate a normal parameter space without measurement noise in EEG
