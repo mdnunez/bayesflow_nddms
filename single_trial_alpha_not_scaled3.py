@@ -2,10 +2,9 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 16-May-23     Michael Nunez      Conversion from single_trial_alpha.py
-#                          Assume noisy absolute evidence scale is observed
-# 14-June-23    Michael Nunez                   Add publication text
-# 20-June-23    Michael Nunez     Relabel "var_alpha" as "std_alpha" for clarity
+# 21-June-23     Michael Nunez      Conversion from single_trial_alpha_not_scaled2.py
+#              The same model as single_trial_alpha_not_scaled2.py with better priors
+# 22-June-23     Michael Nunez       Prior of gamma constrained to > 0 for identifiability
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -13,8 +12,9 @@
 # https://stackoverflow.com/questions/36894191/how-to-get-a-normal-distribution-within-a-range-in-numpy
 
 # Notes:
-# 1) conda activate bf
-# 2) Do not create checkpoint folder manually, let BayesFlow do it otherwise get a no memory.pkl error
+# 1) conda activate bf2
+# 2) Do not create checkpoint folder manually, 
+#let BayesFlow do it otherwise get a no memory.pkl error
 
 import os
 import numpy as np
@@ -27,7 +27,7 @@ from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyf
 
 num_epochs = 500
 view_simulation = False
-train_fitter = False
+train_fitter = True
 
 
 # Get the filename of the currently running script
@@ -68,23 +68,24 @@ def draw_prior():
     # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time, index 3
     ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
 
-    # std_alpha ~ N(1.0, 0.5) in [0, 3], trial-to-trial std in boundary, index 4
-    std_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+    # std_alpha ~ U(0.0, 1.0), trial-to-trial standard deviation in boundary, index 4
+    std_alpha = RNG.uniform(0.0, 1.0)
 
     #dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient, index 5
     dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-    # sigma1 ~ U(0.0, 5.0),measurement noise of extdata1, index 6
-    sigma1 = RNG.uniform(0.0, 5.0)
+    # gamma ~ U(0.0, 1/std_alpha), effect of single-trial boundary on extdata1, index 6
+    # Note that abs(gamma) must be less than 1/std_alpha, this results in a strange prior distribution
+    gamma = RNG.uniform(0, 1/std_alpha)
 
-    p_samples = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, sigma1))
+    p_samples = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, gamma))
     return p_samples
 
 
 num_params = draw_prior().shape[0]
 
 @njit
-def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1, 
+def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, gamma, 
     dt=.01, max_steps=400.):
     """Simulates a trial from the diffusion model."""
 
@@ -108,9 +109,15 @@ def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
 
     rt = n_steps * dt
 
- 
+    # Fixed external data mean so that the model always generates data with a mean of 0
+    # This is not exactly 0 so the external data is still jointly tied to the choice-RT (see Ghaderi et al. 2023)
+    mean_extdata1 = gamma * bound_trial - gamma * mu_alpha 
+
+    # Fixed measurement noise so that the model always generates data with a standard deviation of 1
+    std_extdata1 = np.sqrt(1 - gamma**2 * std_alpha**2)  # Restricted to be real by priors of gamma and std_alpha
+
     # Observe absolute measures with noise
-    extdata1 = np.random.normal(1*bound_trial, sigma1)
+    extdata1 = np.random.normal(mean_extdata1, std_extdata1)
 
     if evidence >= bound_trial:
         choicert =  ter + rt  
@@ -124,11 +131,11 @@ def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
 def simulate_trials(params, n_trials):
     """Simulates a diffusion process for trials ."""
 
-    drift, mu_alpha, beta, ter, std_alpha, dc, sigma1 = params
+    drift, mu_alpha, beta, ter, std_alpha, dc, gamma = params
     choicert = np.empty(n_trials)
     z1 = np.empty(n_trials)
     for i in range(n_trials):
-        choicert[i], z1[i] = diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1)
+        choicert[i], z1[i] = diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, gamma)
    
     sim_data = np.stack((choicert, z1), axis=-1)
     return sim_data
@@ -293,7 +300,7 @@ print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f
 
 # BayesFlow native recovery plot, plot only up to 500 in each plot
 fig = bf.diagnostics.plot_recovery(param_samples[0:500,:], true_params[0:500,:], param_names =
-    ['drift', 'mu_boundary', 'beta', 'tau', 'var_boundary', 'dc', 'sigma1'])
+    ['drift', 'mu_boundary', 'beta', 'tau', 'var_boundary', 'dc', 'gamma'])
 fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
@@ -315,18 +322,13 @@ recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
 plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
 
 # Calculate proportion of variance of external data explained by cognition
-# var_eeg1 = std_alpha**2 + sigma1**2
-data1_cognitive_var_samples = param_samples[:, :, 4]**2
+# var_eeg1 = 1
+# This implies:
+# rho = gamma**2 * std_alpha**2
 
-true_data1_cognitive_var = true_params[:, 4]**2
+data1_cognitive_prop_samples = param_samples[:, :, 6]**2 * param_samples[:, :, 4]**2
 
-data1_total_var_samples = data1_cognitive_var_samples + param_samples[:, :, 6]**2
-
-true_data1_total_var = true_data1_cognitive_var + true_params[:, 6]**2
-
-data1_cognitive_prop_samples = data1_cognitive_var_samples / data1_total_var_samples
-
-true_data1_cognitive_prop = true_data1_cognitive_var / true_data1_total_var
+true_data1_cognitive_prop = true_params[:, 6]**2 * true_params[:, 4]**2
 
 # plt.figure()
 # sns.kdeplot(true_data1_cognitive_prop)
@@ -376,7 +378,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[0:500, :, 4, None],
     true_params[0:500, 4].squeeze())
-plt.ylim(0.0, 2.5)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Trial-to-trial std in boundary')
@@ -396,11 +398,11 @@ plt.close()
 plt.figure()
 recovery(param_samples[0:500, :, 6, None],
     true_params[0:500, 6].squeeze())
-plt.ylim(0.0, 6.0)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('data1 variance not related to cognition')
-plt.savefig(f'{plot_path}/{model_name}_data1Noise.png')
+plt.title('Effect of single-trial boundary on data1')
+plt.savefig(f'{plot_path}/{model_name}_gamma.png')
 plt.close()
 
 
@@ -469,7 +471,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 4, None],
     true_params[high_cog_sims, 4].squeeze())
-plt.ylim(0.0, 2.5)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Trial-to-trial std in boundary')
@@ -489,11 +491,11 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 6, None],
     true_params[high_cog_sims, 6].squeeze())
-plt.ylim(0.0, 6.0)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('data1 variance not related to cognition')
-plt.savefig(f'{plot_path}/{model_name}_data1Noise_high_prop.png')
+plt.title('Effect of single-trial boundary on data1')
+plt.savefig(f'{plot_path}/{model_name}_gamma_high_prop.png')
 plt.close()
 
 
@@ -602,7 +604,7 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 4, None],
     true_params[high_cog_sims, 4].squeeze())
-plt.ylim(0.0, 2.5)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Trial-to-trial std in boundary')
@@ -622,11 +624,11 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 6, None],
     true_params[high_cog_sims, 6].squeeze())
-plt.ylim(0.0, 6.0)
+plt.ylim(0.0, 1.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('data1 variance not related to cognition')
-plt.savefig(f'{plot_path}/{model_name}_data1Noise_higher_prop.png')
+plt.title('Effect of single-trial boundary on data1')
+plt.savefig(f'{plot_path}/{model_name}_gamma_higher_prop.png')
 plt.close()
 
 
@@ -755,16 +757,14 @@ std_alpha = 1
 # diffusion coefficient - index 5
 dc = 1
 
-# measurement noise of extdata1 - index 6
-sigma1 = 0.1
+# effect of single-trial boundary on extdata1, index 6
+gamma = 1
 
 
-sim_data1_cognitive_var = std_alpha**2
-sim_data1_total_var = sim_data1_cognitive_var + sigma1**2
-sim_data1_cognitive_prop = sim_data1_cognitive_var / sim_data1_total_var
+sim_data1_cognitive_prop = gamma**2 * std_alpha**2
 print('The proportion of cognition explained by external data 1 is %.3f' % sim_data1_cognitive_prop)
 
-input_params = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, sigma1))
+input_params = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, gamma))
 
 np.random.seed(2024) # Set the random seed to generate the same plots every time
 n_trials = 300
