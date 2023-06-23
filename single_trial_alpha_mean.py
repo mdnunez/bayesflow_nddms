@@ -2,9 +2,8 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 21-June-23     Michael Nunez      Conversion from single_trial_alpha_not_scaled2.py
-#              The same model as single_trial_alpha_not_scaled2.py with better priors
-# 22-June-23     Michael Nunez       Prior of gamma constrained to > 0 for identifiability
+# 23-June-23     Michael Nunez      Conversion from single_trial_alpha_not_scaled3.py
+#              The same model as but assuming a observed mean of extdata1
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -109,9 +108,8 @@ def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, gamma,
 
     rt = n_steps * dt
 
-    # Fixed external data mean so that the model always generates data with a mean of 0
-    # This is not exactly 0 so the external data is still jointly tied to the choice-RT (see Ghaderi et al. 2023)
-    mean_extdata1 = gamma * bound_trial - gamma * mu_alpha 
+    # The mean of the external data gives the scale of evidence for identifiability
+    mean_extdata1 = gamma * bound_trial
 
     # Fixed measurement noise so that the model always generates data with a standard deviation of 1
     std_extdata1 = np.sqrt(1 - gamma**2 * std_alpha**2)  # Restricted to be real by priors of gamma and std_alpha
@@ -198,28 +196,35 @@ if view_simulation:
 
     plt.figure()
     sns.kdeplot(extdata1_means)
+    plt.xlabel('External data means')
 
     plt.figure()
     sns.kdeplot(extdata1_vars)
+    plt.xlabel('External data variances')
 
     plt.figure()
     sns.kdeplot(rt_means)
+    plt.xlabel('Response time means')
 
     plt.figure()
     sns.kdeplot(choice_means)
+    plt.xlabel('Choice means')
 
     plt.figure()
     sns.kdeplot(np.squeeze(these_sims[0, :, 1]))
+    plt.xlabel('External data values')
 
     sim_rts = np.abs(np.squeeze(these_sims[0, :, 0]))
     sim_choices = np.sign(np.squeeze(these_sims[0,:, 0]))
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == 1])
+    plt.xlabel('RTs when choice == 1')
 
     # This should look like a shifted Wald
     plt.figure()
     sns.kdeplot(sim_rts[sim_choices == -1])
+    plt.xlabel('RTs when choice == -1')
 
     plt.show(block=False)
 
@@ -398,7 +403,8 @@ plt.close()
 plt.figure()
 recovery(param_samples[0:500, :, 6, None],
     true_params[0:500, 6].squeeze())
-plt.ylim(0.0, 1.0)
+plt.ylim(0.0, 10.0)
+plt.xlim(0.0, 10.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Effect of single-trial boundary on data1')
@@ -491,7 +497,8 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 6, None],
     true_params[high_cog_sims, 6].squeeze())
-plt.ylim(0.0, 1.0)
+plt.ylim(0.0, 10.0)
+plt.xlim(0.0, 10.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Effect of single-trial boundary on data1')
@@ -624,7 +631,8 @@ plt.close()
 plt.figure()
 recovery(param_samples[high_cog_sims, :, 6, None],
     true_params[high_cog_sims, 6].squeeze())
-plt.ylim(0.0, 1.0)
+plt.ylim(0.0, 10.0)
+plt.xlim(0.0, 10.0)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Effect of single-trial boundary on data1')
