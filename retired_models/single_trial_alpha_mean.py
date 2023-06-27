@@ -108,7 +108,7 @@ def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, gamma,
 
     rt = n_steps * dt
 
-    # The mean of the external data gives the scale of evidence for identifiability
+    # The external data gives the scale of evidence for identifiability
     mean_extdata1 = gamma * bound_trial
 
     # Fixed measurement noise so that the model always generates data with a standard deviation of 1

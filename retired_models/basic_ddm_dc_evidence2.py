@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # UNFINISHED   Michael Nunez   Converted from basic_ddm_dc_evidence.py
 #   Standardize across trials and not within trials, we expect to be able to observe the same scale across trials
+# NEVER TESTED - This won't work as proven by simulation
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
