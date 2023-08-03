@@ -26,6 +26,7 @@
 # 07/19/21      Michael Nunez               Remove unnecessary imports
 # 25-April-2022 Michael Nunez                   Remove use of numba
 # 13-March-2023 Michael Nunez                 Add recovery_scatter()
+# 31-July-2023  Michael Nunez           ERC interview flag for recovery_scatter()
 
 # Modules
 import numpy as np
@@ -758,7 +759,8 @@ def recovery(possamps, truevals):  # Parameter recovery plots
 # Using a better Estimated versus True parameter plot"""
 
 def recovery_scatter(theta_true, theta_est, param_names,
-                      figsize=(20, 4), font_size=12, color='blue', alpha=0.4,grantB1=False):
+                      figsize=(20, 4), font_size=12, color='blue', 
+                      ercinterview=False, alpha=0.4,grantB1=False):
     """ Plots a scatter plot with abline of the estimated posterior means vs true values.
 
     Parameters
@@ -787,8 +789,12 @@ def recovery_scatter(theta_true, theta_est, param_names,
     plt.rcParams['font.size'] = font_size
 
     # Determine n_subplots dynamically
-    n_row = int(np.ceil(len(param_names) / 6))
-    n_col = int(np.ceil(len(param_names) / n_row))
+    if ercinterview:
+        n_col = int(np.ceil(len(param_names) / 6))
+        n_row = int(np.ceil(len(param_names) / n_col))
+    else:
+        n_row = int(np.ceil(len(param_names) / 6))
+        n_col = int(np.ceil(len(param_names) / n_row))
 
     # Initialize figure
     f, axarr = plt.subplots(n_row, n_col, figsize=figsize)
@@ -817,7 +823,7 @@ def recovery_scatter(theta_true, theta_est, param_names,
                      size=font_size)
         
         axarr[j].set_xlabel('True %s' % param_names[j],fontsize=font_size)
-        if np.mod(j,6) == 0:
+        if (np.mod(j,6) == 0) or ercinterview:
             # Label plot
             axarr[j].set_ylabel('Estimated parameters',fontsize=font_size)
         axarr[j].spines['right'].set_visible(False)
