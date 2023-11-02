@@ -4,6 +4,7 @@
 # ====         ================                       ======================
 # 20-March-23     Michael        Basic DDM with the diffusion coefficient free to vary
 # 22-March-23   Michael D. Nunez    Insert flag for when fitter is trained, new plots
+# 06-Sept-23    Michael Nunez        Load pretrained network
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -28,8 +29,8 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-train_fitter = False
-num_epochs = 1
+train_fitter = True
+num_epochs = 500
 
 
 
@@ -200,6 +201,8 @@ if train_fitter:
     # Validation, Loss Curves
     f = bf.diagnostics.plot_losses(losses['train_losses'], losses['val_losses'])
     f.savefig(f"{plot_path}/{model_name}_validation.png")
+else:
+    status = trainer.load_pretrained_network()
 
 
 # Computational Adequacy

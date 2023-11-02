@@ -19,14 +19,16 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 06/29/20      Michael Nunez                             Original code
-# 12/04/20      Michael Nunez              Update explanation of summary output
-# 01/14/21      Michael Nunez             Add simuldiff2ndt() and flipstanout()
-# 02/10/21      Michael Nunez                 Add logwienerpdf
-# 07/19/21      Michael Nunez               Remove unnecessary imports
+# 06/29/20(US)  Michael Nunez                             Original code
+# 12/04/20(US)  Michael Nunez              Update explanation of summary output
+# 01/14/21(US)  Michael Nunez             Add simuldiff2ndt() and flipstanout()
+# 02/10/21(US)  Michael Nunez                 Add logwienerpdf
+# 07/19/21(US)  Michael Nunez               Remove unnecessary imports
 # 25-April-2022 Michael Nunez                   Remove use of numba
 # 13-March-2023 Michael Nunez                 Add recovery_scatter()
 # 31-July-2023  Michael Nunez           ERC interview flag for recovery_scatter()
+# 06-Sept-23    Michael Nunez      In recovery_scatter() print pearson correlation
+
 
 # Modules
 import numpy as np
@@ -821,6 +823,14 @@ def recovery_scatter(theta_true, theta_est, param_names,
                      verticalalignment='center',
                      transform=axarr[j].transAxes, 
                      size=font_size)
+
+        # Compute pearson correlation
+        pearson, pvalue = stats.pearsonr(theta_true[:, j], theta_est[:, j])
+        axarr[j].text(0.7, 0.1, '$\\rho$={:.3f}'.format(pearson),
+                     horizontalalignment='left',
+                     verticalalignment='center',
+                     transform=axarr[j].transAxes, 
+                     size=font_size)
         
         axarr[j].set_xlabel('True %s' % param_names[j],fontsize=font_size)
         if (np.mod(j,6) == 0) or ercinterview:
@@ -899,7 +909,7 @@ def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, paramet
         # Plot analytic vs estimated
         axarr[j].scatter(posteriors1[j, :], posteriors2[j, :], color=color, alpha=alpha)
         
-        # Compute R2
+        # Compute correlation
         pearson, pvalue = stats.pearsonr(posteriors1[j, :], posteriors2[j, :])
         axarr[j].text(0.1, 0.8, '$\\rho$={:.3f}'.format(pearson),
                      horizontalalignment='left',
