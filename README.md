@@ -23,4 +23,4 @@ bayesflow_nddms is licensed under the GNU General Public License v3.0 and writte
 ### Further references
 Ghaderi-Kangavari, A., Rad, J.A. & Nunez, M.D. A General Integrative Neurocognitive Modeling Framework to Jointly Describe EEG and Decision-making on Single Trials. Comput Brain Behav (2023). https://doi.org/10.1007/s42113-023-00167-4
 
-Nunez, M. D., Fernandez, K., Srinivasan, R. & Vandekerckhove, J. (2023). [A tutorial on fitting joint models of M/EEG and behavior to understand cognition.](https://psyarxiv.com/vf6t5) PsyArXiv. https://doi.org/10.31234/osf.io/vf6t5
+Nunez, M. D., Fernandez, K., Srinivasan, R. & Vandekerckhove, J. (2022). [A tutorial on fitting joint models of M/EEG and behavior to understand cognition.](https://psyarxiv.com/vf6t5) PsyArXiv. https://doi.org/10.31234/osf.io/vf6t5
