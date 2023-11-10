@@ -20,7 +20,7 @@
 # Brown et al. (2006) Evaluating methods for approximating stochastic differential equations
 
 # Notes:
-# 1) conda activate bf
+# 1) conda activate bf3 / conda activate bf
 # 2) Do not create checkpoint folder manually, let BayesFlow do it otherwise get a no memory.pkl error
 
 import os
@@ -237,7 +237,7 @@ inference_net = bf.networks.InvertibleNetwork(num_params=num_params)
 amortizer = bf.amortizers.AmortizedPosterior(inference_net, summary_net)
 
 
-# If the checkpoint path does not exist, create it
+# Define checkpoint path
 checkpoint_path = f"checkpoint/{model_name}"
 
 # We need to pass the custom configurator here
