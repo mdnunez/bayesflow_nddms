@@ -2,17 +2,8 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 16-May-23     Michael Nunez      Conversion from single_trial_alpha.py
-#                          Assume noisy absolute evidence scale is observed
-# 14-June-23    Michael Nunez                   Add publication text
-# 20-June-23    Michael Nunez     Relabel "var_alpha" as "std_alpha" for clarity
-# 29-June-23    Michael Nunez   Fit model to alternative ground truth with related diffusion coefficient
-# 30-June-23    Michael Nunez             Scalar misspecification
-# 05-July-23    Michael Nunez            Step size misspecification, test Brown et al. 2006
-# 28-July-23    Michael Nunez           Make summary plots for grant
-# 06-Sept-23    Michael Nunez        Scalar misspecification of gamma =2
-# 02-Nov-23     Michael Nunez                Print publication text
-# 15-Nov-23     Michael Nunez            ercinterview = False
+# 13-Dec-2023   Michael D. Nunez      Converted from single_trial_alpha_scaled.py
+# 14-Dec-2023   Michael D. Nunez               Fix misspecified model simulations
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -119,7 +110,8 @@ def diffusion_trial(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
 
  
     # Observe absolute measures with noise
-    extdata1 = np.random.normal(1*bound_trial, sigma1)
+    # 1*bound_trial to 1*bound_trial - mu_alpha, change from single_trial_alpha_not_scaled.py
+    extdata1 = np.random.normal(1*bound_trial - mu_alpha, sigma1)
 
     if evidence >= bound_trial:
         choicert =  ter + rt  
@@ -854,8 +846,8 @@ def diffusion_trial_alt(drift, alpha, beta, ter, std_dc, mu_dc, sigma1,
     rt = n_steps * dt
 
  
-    # Observe absolute measures with noise
-    extdata1 = np.random.normal(1*dc_trial, sigma1)
+    # Observe absolute measures with noise, change from single_trial_alpha_not_scaled.py
+    extdata1 = np.random.normal(1*dc_trial - mu_dc, sigma1)
 
     if evidence >= alpha:
         choicert =  ter + rt  
@@ -1151,8 +1143,8 @@ def diffusion_trial_scale(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1, gam
     rt = n_steps * dt
 
  
-    # Observe scaled measures with noise
-    extdata1 = np.random.normal(gamma*bound_trial, sigma1)
+    # Observe scaled measures with noise, change from single_trial_alpha_not_scaled.py
+    extdata1 = np.random.normal(gamma*bound_trial - gamma*mu_alpha, sigma1)
 
     if evidence >= bound_trial:
         choicert =  ter + rt  
@@ -1379,8 +1371,8 @@ def diffusion_trial_scale2(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
     rt = n_steps * dt
 
  
-    # Observe scaled measures with noise
-    extdata1 = np.random.normal(2*bound_trial, sigma1)
+    # Observe scaled measures with noise, change from single_trial_alpha_not_scaled.py
+    extdata1 = np.random.normal(2*bound_trial - 2*mu_alpha, sigma1)
 
     if evidence >= bound_trial:
         choicert =  ter + rt  

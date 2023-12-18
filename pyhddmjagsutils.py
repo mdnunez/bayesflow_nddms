@@ -1,6 +1,6 @@
 # pyhddmjagsutils.py - Definitions for simulation, model diagnostics, and parameter recovery
 #
-# Copyright (C) 2022 Michael D. Nunez, <m.d.nunez@uva.nl>
+# Copyright (C) 2023 Michael D. Nunez, <m.d.nunez@uva.nl>
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@
 # 13-March-2023 Michael Nunez                 Add recovery_scatter()
 # 31-July-2023  Michael Nunez           ERC interview flag for recovery_scatter()
 # 06-Sept-23    Michael Nunez      In recovery_scatter() print pearson correlation
+# 15-Nov-23     Michael Nunez            grantB1 x&y limit changes
 
 
 # Modules
@@ -839,17 +840,17 @@ def recovery_scatter(theta_true, theta_est, param_names,
         axarr[j].spines['right'].set_visible(False)
         axarr[j].spines['top'].set_visible(False)
 
-        if grantB1:
-            axarr[0].set_xlim(-4.5, 4.5)
-            axarr[0].set_ylim(-4.5, 4.5)
-            axarr[0].set_xticks([-4, -2, 0, 2, 4])
-            axarr[0].set_yticks([-4, -2, 0, 2, 4])
-            axarr[0].set_aspect('equal', adjustable='box')
-            axarr[1].set_xlim(0.4, 2.1)
-            axarr[1].set_ylim(0.4, 2.1)
-            axarr[1].set_xticks([0.5, 1, 1.5, 2])
-            axarr[1].set_yticks([0.5, 1, 1.5, 2])
-            axarr[1].set_aspect('equal', adjustable='box')
+        # if grantB1:
+        #     axarr[0].set_xlim(-5.5, 5.5)
+        #     axarr[0].set_ylim(-5.5, 5.5)
+        #     axarr[0].set_xticks([-4, -2, 0, 2, 4])
+        #     axarr[0].set_yticks([-4, -2, 0, 2, 4])
+        #     axarr[0].set_aspect('equal', adjustable='box')
+        #     axarr[1].set_xlim(0, 2.1)
+        #     axarr[1].set_ylim(0, 2.1)
+        #     axarr[1].set_xticks([0.5, 1, 1.5, 2])
+        #     axarr[1].set_yticks([0.5, 1, 1.5, 2])
+        #     axarr[1].set_aspect('equal', adjustable='box')
 
     
     # Adjust spaces
