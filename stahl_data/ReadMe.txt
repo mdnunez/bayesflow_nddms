@@ -1,0 +1,1 @@
+pre_Ne and pre_Pe refer to the Ne/c and Pe/c amplitudes that are centered around the participant's mean.
