@@ -141,7 +141,9 @@ model {
     for (i in 1:N) {
 
         # Observations of accuracy*RT for DDM process of rightward/leftward RT
-        y[i] ~ dwiener(alpha[participant[i]]/varsigma[participant[i]], ndt[participant[i]], beta[participant[i]], delta[participant[i]]/varsigma[participant[i]])
+        y[i] ~ dwiener(alpha[participant[i]]/varsigma[participant[i]], 
+        ndt[participant[i]], beta[participant[i]], 
+        delta[participant[i]]/varsigma[participant[i]])
         
 
     }
@@ -154,7 +156,8 @@ modelstring = 'modelfits/alpha_not_scaled_test1.mat'
 
 
 # Make sure $LD_LIBRARY_PATH sees /usr/local/lib
-# Make sure that the correct JAGS/modules-4/ folder contains wiener.so and wiener.la
+# Make sure that the correct JAGS/modules-4/ folder contains 
+# wiener.so and wiener.la
 pyjags.modules.load_module('wiener')
 pyjags.modules.load_module('dic')
 pyjags.modules.list_modules()

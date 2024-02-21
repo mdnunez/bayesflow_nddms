@@ -3,6 +3,7 @@
 # Date              Programmers                 Descriptions of Change
 # ====            ================              ======================
 # 14-Feb-2024     Michael D. Nunez               Original code
+# 19-Feb-2024     Michael D. Nunez    Different model, same # of parameters
 
 # Academic references:
 #
@@ -31,17 +32,23 @@ from pyhddmjagsutils import (
     plot_posterior2d, 
     jellyfish
 )
-from single_trial_alpha_not_scaled import (
+from single_trial_alpha_standard import (
     trainer,
     configurator,
     amortizer
 )
+# from single_trial_alpha_not_scaled import (
+#     trainer,
+#     configurator,
+#     amortizer
+# )
 
-model_name = 'single_trial_alpha_not_scaled'
+model_name = 'single_trial_alpha_standard'
+#model_name = 'single_trial_alpha_not_scaled'
 
 
 # DATA LOADING
-explore = True
+explore = False
 
 # Load base data from Mattes et al. (2022)
 # Originally data from Stahl et al. (2015)
@@ -88,7 +95,6 @@ for part in np.unique(base_df['subj_idx']):
     # base_df['pre_Pe_no_Ne'][these_trials] = residuals  # Bad, see Pandas ref
     base_df.loc[these_trials, 'pre_Pe_no_Ne'] = residuals
     normalized_Pe = (residuals - np.mean(residuals))/np.std(residuals)
-    # base_df['normalized_pre_Pe_no_Ne'][these_trials] = normalized  # Bad
     base_df.loc[these_trials, 'normalized_pre_Pe_no_Ne'] = normalized_Pe
     normalized_Ne = x/np.std(x) # Do not shift the data to get positive values
     base_df.loc[these_trials, 'normalized_Ne'] = normalized_Ne
@@ -126,7 +132,8 @@ status = trainer.load_pretrained_network()
 base_df['choicert'] = base_df['rt']*(2*base_df['response'] - 1)
 
 # Create numpy array of necessary data
-base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']])
+# base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']]) # Original to fit single_trial_alpha_not_scaled.py
+base_data_bf = np.array(base_df[['choicert','normalized_pre_Pe_no_Ne']]) # New to fit single_trial_alpha_standard.py
 
 if explore:
     these_trials = (base_df['subj_idx'] == 1)
@@ -173,7 +180,7 @@ all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
 
 # Plot the results
-
+print('Making jellyfish plots.')
 plot_path = f"data_plots/{model_name}"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
@@ -235,7 +242,7 @@ plt.ylabel('Participant')
 plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
 plt.close()
 
-
+print('Making 2D plots.')
 nplots = 18
 scatter_color = '#ABB0B8'
 plot_posterior2d(all_posteriors[0:nplots, :, 5].squeeze(),
@@ -255,3 +262,53 @@ plot_posterior2d(all_posteriors[0:nplots, :, 5].squeeze(),
    ['Diffusion coefficient', 'Drift rate'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
 plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_stahl_base.png")
+
+
+# Plot a 3D joint posterior
+fig = plt.figure(figsize=(10,10))
+ax = fig.add_subplot(111, projection='3d')
+
+main_color = '#332288'
+secondary_color = '#ABB0B8'
+
+# By default plot the 3D posterior for only one participant
+part_indx = 0 #Participant 1
+this_part = np.unique(base_df['subj_idx'])[part_indx]
+print(f'Making 3D plot for Participant {this_part}.')
+
+# Main 3D scatter plot
+ax.scatter(all_posteriors[part_indx, :, 0].squeeze(),
+           all_posteriors[part_indx, :, 1].squeeze(),
+           all_posteriors[part_indx, :, 5].squeeze(), alpha=0.25, 
+           color=main_color)
+
+# 2D scatter plot for drift rate and boundary (xy plane) at min diffusion coefficient
+min_dc = all_posteriors[part_indx, :, 5].min()
+ax.scatter(all_posteriors[part_indx, :, 0].squeeze(), 
+    all_posteriors[part_indx, :, 1].squeeze(), 
+    min_dc, alpha=0.25, color=secondary_color)
+
+# 2D scatter plot for drift rate and diffusion coefficient (xz plane) at max boundary
+max_boundary = all_posteriors[part_indx, :, 1].max()
+ax.scatter(all_posteriors[part_indx, :, 0].squeeze(), max_boundary, 
+    all_posteriors[part_indx, :, 5].squeeze(), alpha=0.25, 
+    color=secondary_color)
+
+# 2D scatter plot for boundary and diffusion coefficient (yz plane) at min drift rate
+min_drift_rate = all_posteriors[part_indx, :, 0].min()
+ax.scatter(min_drift_rate, all_posteriors[part_indx, :, 1].squeeze(), 
+    all_posteriors[part_indx, :, 5].squeeze(), alpha=0.25, 
+    color=secondary_color)
+
+ax.set_xlabel(r'Drift rate ($\delta$)', fontsize=16, labelpad=10)
+ax.set_ylabel(r'Boundary ($\alpha$)', fontsize=16, labelpad=10)
+ax.set_zlabel(r'Diffusion coefficient ($\varsigma$)', fontsize=16, 
+    labelpad=10)
+
+# Rotate the plot slightly clockwise around the z-axis
+elevation = 20  # Default elevation
+azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
+ax.view_init(elev=elevation, azim=azimuth)
+
+plt.savefig(f"{plot_path}/{model_name}_3d_posterior_stahl_base.png", 
+    dpi=300, bbox_inches="tight", pad_inches=0.5)
