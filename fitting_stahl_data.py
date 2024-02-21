@@ -4,6 +4,7 @@
 # ====            ================              ======================
 # 14-Feb-2024     Michael D. Nunez               Original code
 # 19-Feb-2024     Michael D. Nunez    Different model, same # of parameters
+# 21-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standnorm
 
 # Academic references:
 #
@@ -32,18 +33,24 @@ from pyhddmjagsutils import (
     plot_posterior2d, 
     jellyfish
 )
-from single_trial_alpha_standard import (
+from single_trial_alpha_standnorm import (
     trainer,
     configurator,
     amortizer
 )
+# from single_trial_alpha_standard import (
+#     trainer,
+#     configurator,
+#     amortizer
+# )
 # from single_trial_alpha_not_scaled import (
 #     trainer,
 #     configurator,
 #     amortizer
 # )
 
-model_name = 'single_trial_alpha_standard'
+model_name = 'single_trial_alpha_standnorm'
+#model_name = 'single_trial_alpha_standard'
 #model_name = 'single_trial_alpha_not_scaled'
 
 
@@ -167,16 +174,17 @@ for part in np.unique(base_df['subj_idx']):
     # Obtain posterior samples
     post_samples = amortizer.sample(configured_dict, num_posterior_draws)
 
-    all_posteriors[part_track, :, 0:7] = post_samples
+    all_posteriors[part_track, :, 0:6] = post_samples
+    #all_posteriors[part_track, :, 0:7] = post_samples
     part_track += 1
 
-# Calculate percentage of cognitive variance explained
-data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
-data1_total_var_samples = (data1_cognitive_var_samples + 
-    all_posteriors[:, :, 6]**2)
-data1_cognitive_prop_samples = (data1_cognitive_var_samples / 
-    data1_total_var_samples)
-all_posteriors[:, :, 7] = data1_cognitive_prop_samples
+# # Calculate percentage of cognitive variance explained
+# data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
+# data1_total_var_samples = (data1_cognitive_var_samples + 
+#     all_posteriors[:, :, 6]**2)
+# data1_cognitive_prop_samples = (data1_cognitive_var_samples / 
+#     data1_total_var_samples)
+# all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
 
 # Plot the results
@@ -228,19 +236,19 @@ plt.ylabel('Participant')
 plt.savefig(f'{plot_path}/{model_name}_DC_stahl_base.png')
 plt.close()
 
-plt.figure()
-jellyfish(all_posteriors[:,:,6,None])
-plt.xlabel('Noise in Pe not related to boundary')
-plt.ylabel('Participant')
-plt.savefig(f'{plot_path}/{model_name}_PeNoise_stahl_base.png')
-plt.close()
+# plt.figure()
+# jellyfish(all_posteriors[:,:,6,None])
+# plt.xlabel('Noise in Pe not related to boundary')
+# plt.ylabel('Participant')
+# plt.savefig(f'{plot_path}/{model_name}_PeNoise_stahl_base.png')
+# plt.close()
 
-plt.figure()
-jellyfish(all_posteriors[:,:,7,None])
-plt.xlabel('Proportion of Pe related to single-trial boundary')
-plt.ylabel('Participant')
-plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
-plt.close()
+# plt.figure()
+# jellyfish(all_posteriors[:,:,7,None])
+# plt.xlabel('Proportion of Pe related to single-trial boundary')
+# plt.ylabel('Participant')
+# plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
+# plt.close()
 
 print('Making 2D plots.')
 nplots = 18

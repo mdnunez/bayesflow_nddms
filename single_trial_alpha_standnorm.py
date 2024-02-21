@@ -26,8 +26,8 @@ from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d, jellyf
 num_epochs = 500
 view_simulation = False
 train_fitter = False
-make_recovery_plots = True
-test_misspecification = True
+make_recovery_plots = False
+test_misspecification = False
 
 
 # Get the filename of the currently running script
