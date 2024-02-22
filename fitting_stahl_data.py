@@ -5,6 +5,8 @@
 # 14-Feb-2024     Michael D. Nunez               Original code
 # 19-Feb-2024     Michael D. Nunez    Different model, same # of parameters
 # 21-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standnorm
+# 22-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standard
+#              ***Scale data across participants and not within participants
 
 # Academic references:
 #
@@ -33,26 +35,23 @@ from pyhddmjagsutils import (
     plot_posterior2d, 
     jellyfish
 )
-from single_trial_alpha_standnorm import (
-    trainer,
-    configurator,
-    amortizer
-)
 # from single_trial_alpha_standard import (
 #     trainer,
 #     configurator,
 #     amortizer
 # )
-# from single_trial_alpha_not_scaled import (
-#     trainer,
-#     configurator,
-#     amortizer
-# )
+from single_trial_alpha_not_scaled import (
+    trainer,
+    configurator,
+    amortizer
+)
 
-model_name = 'single_trial_alpha_standnorm'
 #model_name = 'single_trial_alpha_standard'
-#model_name = 'single_trial_alpha_not_scaled'
+model_name = 'single_trial_alpha_not_scaled'
 
+# What data to fit?
+fit_Pe = True
+fit_fake = False
 
 # DATA LOADING
 explore = False
@@ -88,25 +87,26 @@ if explore:
 # Results in the Pe/c component that has influence of the Ne/c component removed
 # See paper by Mattes et al. (2022)
 
-base_df['normalized_Ne'] = np.nan
-base_df['pre_Pe_no_Ne'] = np.nan
-base_df['normalized_pre_Pe_no_Ne'] = np.nan
-base_df['alpha_like_Pe'] = np.nan
-for part in np.unique(base_df['subj_idx']):
-    these_trials = (base_df['subj_idx'] == part)
-    x = base_df['pre_Ne'][these_trials]
-    y = base_df['pre_Pe'][these_trials]
-    coefficients = np.polyfit(x, y, deg=1) # Simple linear regression
-    pred_y = np.polyval(coefficients, x)
-    residuals = y - pred_y
-    # base_df['pre_Pe_no_Ne'][these_trials] = residuals  # Bad, see Pandas ref
-    base_df.loc[these_trials, 'pre_Pe_no_Ne'] = residuals
-    normalized_Pe = (residuals - np.mean(residuals))/np.std(residuals)
-    base_df.loc[these_trials, 'normalized_pre_Pe_no_Ne'] = normalized_Pe
-    normalized_Ne = x/np.std(x) # Do not shift the data to get positive values
-    base_df.loc[these_trials, 'normalized_Ne'] = normalized_Ne
-    alpha_like_Pe = (normalized_Pe + 3)/3
-    base_df.loc[these_trials, 'alpha_like_Pe'] = alpha_like_Pe
+
+x = base_df['pre_Ne']
+y = base_df['pre_Pe']
+coefficients = np.polyfit(x, y, deg=1) # Simple linear regression
+pred_y = np.polyval(coefficients, x)
+residuals = y - pred_y
+base_df['pre_Pe_no_Ne'] = residuals
+normalized_Pe = (residuals - np.mean(residuals))/np.std(residuals)
+base_df['normalized_pre_Pe_no_Ne'] = normalized_Pe
+normalized_Ne = x/np.std(x) # Do not shift the data to get positive values
+base_df['normalized_Ne'] = normalized_Ne
+
+# Scale the external correlates to desired alpha range
+alpha_like_Pe = (normalized_Pe + 3)/3 
+base_df['alpha_like_Pe'] = alpha_like_Pe
+
+# Create fake external correlates that are known to be unrelated
+RNG = np.random.default_rng(2024)
+base_df['alpha_like_fake'] = RNG.normal(1.0, 1/3, 
+    size=np.size(base_df['alpha_like_Pe']))
 
 
 
@@ -121,7 +121,10 @@ if explore:
     print(np.any(np.isnan(base_df['alpha_like_Pe'])))
     plt.figure()
     plt.hist(first_norm)
-    sub_df = base_df.iloc[:, -6:]
+    first_fake = base_df['alpha_like_fake'][where_first]
+    plt.figure()
+    plt.hist(first_fake)
+    sub_df = base_df.iloc[:, -7:]
     print(sub_df.head())
     print(sub_df.info())
     corr_matrix = sub_df.corr()
@@ -139,8 +142,20 @@ status = trainer.load_pretrained_network()
 base_df['choicert'] = base_df['rt']*(2*base_df['response'] - 1)
 
 # Create numpy array of necessary data
-# base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']]) # Original to fit single_trial_alpha_not_scaled.py
-base_data_bf = np.array(base_df[['choicert','normalized_pre_Pe_no_Ne']]) # New to fit single_trial_alpha_standard.py
+if fit_Pe:
+    if model_name == 'single_trial_alpha_not_scaled':
+        if fit_fake:
+            print('Fitting model to fake data on chosen alpha scale')
+            base_data_bf = np.array(base_df[['choicert','alpha_like_fake']])
+        else:
+            print('Fitting model to normalized pre Pe data, on chosen alpha scale')
+            base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']])
+    else: 
+        print('Fitting model to normalized pre Pe data, without influence of Ne...')  
+        base_data_bf = np.array(base_df[['choicert','normalized_pre_Pe_no_Ne']])
+else:
+    print('Fitting model to normalized pre Ne data...')
+    base_data_bf = np.array(base_df[['choicert','normalized_Ne']])
 
 if explore:
     these_trials = (base_df['subj_idx'] == 1)
@@ -174,22 +189,30 @@ for part in np.unique(base_df['subj_idx']):
     # Obtain posterior samples
     post_samples = amortizer.sample(configured_dict, num_posterior_draws)
 
-    all_posteriors[part_track, :, 0:6] = post_samples
-    #all_posteriors[part_track, :, 0:7] = post_samples
+    all_posteriors[part_track, :, 0:7] = post_samples
     part_track += 1
 
-# # Calculate percentage of cognitive variance explained
-# data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
-# data1_total_var_samples = (data1_cognitive_var_samples + 
-#     all_posteriors[:, :, 6]**2)
-# data1_cognitive_prop_samples = (data1_cognitive_var_samples / 
-#     data1_total_var_samples)
-# all_posteriors[:, :, 7] = data1_cognitive_prop_samples
+# Calculate percentage of cognitive variance explained
+data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
+data1_total_var_samples = (data1_cognitive_var_samples + 
+    all_posteriors[:, :, 6]**2)
+data1_cognitive_prop_samples = (data1_cognitive_var_samples / 
+    data1_total_var_samples)
+all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
 
 # Plot the results
 print('Making jellyfish plots.')
-plot_path = f"data_plots/{model_name}"
+if fit_Pe:
+    if model_name == 'single_trial_alpha_not_scaled':
+        if fit_fake:
+            plot_path = f"data_plots/{model_name}/using_alpha_like_fake/"
+        else:
+            plot_path = f"data_plots/{model_name}/using_alpha_like_Pe/"
+    else:
+        plot_path = f"data_plots/{model_name}/using_normalized_pre_Pe_no_Ne/"
+else:
+    plot_path = f"data_plots/{model_name}/using_normalized_Ne/"
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
@@ -236,19 +259,31 @@ plt.ylabel('Participant')
 plt.savefig(f'{plot_path}/{model_name}_DC_stahl_base.png')
 plt.close()
 
-# plt.figure()
-# jellyfish(all_posteriors[:,:,6,None])
-# plt.xlabel('Noise in Pe not related to boundary')
-# plt.ylabel('Participant')
-# plt.savefig(f'{plot_path}/{model_name}_PeNoise_stahl_base.png')
-# plt.close()
+plt.figure()
+jellyfish(all_posteriors[:,:,6,None])
+if fit_Pe:
+    plt.xlabel('Noise in Pe not related to boundary')
+else:
+    plt.xlabel('Noise in Ne not related to boundary')
+plt.ylabel('Participant')
+if fit_Pe:
+    plt.savefig(f'{plot_path}/{model_name}_PeNoise_stahl_base.png')
+else:
+    plt.savefig(f'{plot_path}/{model_name}_NeNoise_stahl_base.png')
+plt.close()
 
-# plt.figure()
-# jellyfish(all_posteriors[:,:,7,None])
-# plt.xlabel('Proportion of Pe related to single-trial boundary')
-# plt.ylabel('Participant')
-# plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
-# plt.close()
+plt.figure()
+jellyfish(all_posteriors[:,:,7,None])
+if fit_Pe:
+    plt.xlabel('Proportion of Pe related to single-trial boundary')
+else:
+    plt.xlabel('Proportion of Ne related to single-trial boundary')
+plt.ylabel('Participant')
+if fit_Pe:
+    plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
+else:
+    plt.savefig(f'{plot_path}/{model_name}_NeProportion_stahl_base.png')
+plt.close()
 
 print('Making 2D plots.')
 nplots = 18

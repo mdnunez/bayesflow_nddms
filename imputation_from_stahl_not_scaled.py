@@ -2,7 +2,7 @@
 #
 # Date              Programmers                 Descriptions of Change
 # ====            ================              ======================
-# 21-Feb-2024     Michael D. Nunez   Converted from singel_trial_alpha_standnorm
+# 22-Feb-2024     Michael D. Nunez        Converted from imputation_from_stahl
 
 # Academic references:
 #
@@ -27,20 +27,21 @@ import matplotlib.pyplot as plt
 from pyhddmjagsutils import (
     plot_posterior2d, 
     recovery,
-    recovery_scatter
+    recovery_scatter,
+    jellyfish
 )
-from single_trial_alpha_standnorm import (
+from single_trial_alpha_not_scaled import (
     trainer,
     configurator,
     amortizer
 )
 
 
-model_name = 'single_trial_alpha_standnorm'
+model_name = 'single_trial_alpha_not_scaled'
 
 
 # DATA LOADING
-explore = True
+explore = False
 
 # Load base data from Mattes et al. (2022)
 # Originally data from Stahl et al. (2015)
@@ -63,8 +64,14 @@ if explore:
     plt.hist(all_Pe)
     plt.title('Histogram of all Pe/c across participants and trials')
 
-all_standard_Pe = (all_Pe - np.mean(all_Pe)) / np.std(all_Pe) # Input to model fits
-single_trial_alphas = (all_standard_Pe + 3)/3
+# Input to model fits
+all_standard_Pe = (all_Pe - np.mean(all_Pe)) / np.std(all_Pe)
+
+# Scale the external correlates to desired alpha range, not same as line below
+alpha_like_Pe = (all_standard_Pe + 3)/3 
+
+# Place imputed boundaries on a nice scale
+single_trial_alphas = (all_standard_Pe + 3)/3 
 
 if explore:
     plt.figure()
@@ -134,7 +141,8 @@ def truncnorm_better(mean=0, sd=1, low=-10, upp=10, size=1):
 # Generate simulated and imputed variables
 RNG = np.random.default_rng(2024)
 imputed_df = pd.DataFrame(index=range(nsubs), 
-    columns=['PartID','Drift', 'Mu_Alpha', 'Beta', 'Ter', 'Var_Alpha', 'Dc'])
+    columns=['PartID','Drift', 'Mu_Alpha', 'Beta', 'Ter', 'Std_Alpha', 'Dc'
+    'Sigma1', 'Prop_cog_var'])
 imputed_df.loc[:, :] = np.nan
 part_track = 0
 for part in np.unique(base_df['subj_idx']):
@@ -148,9 +156,11 @@ for part in np.unique(base_df['subj_idx']):
     imputed_df.loc[part_track,'Beta'] = beta
     ter = truncnorm_better(mean=0.4, sd=0.1, low=0.0, upp=1.5)[0]
     imputed_df.loc[part_track,'Ter'] = ter
-    imputed_df.loc[part_track,'Var_Alpha'] = np.var(single_trial_alphas[these_trials])
+    imputed_df.loc[part_track,'Std_Alpha'] = np.std(single_trial_alphas[these_trials])
     dc = truncnorm_better(mean=1.0, sd=0.25, low=0.0, upp=10)[0] #Set DC around 1
     imputed_df.loc[part_track,'Dc'] = dc
+    imputed_df.loc[part_track,'Sigma1'] = 0  # Assume no unexplained variance
+    imputed_df.loc[part_track,'Prop_cog_var'] = 1
     part_track += 1
 
 
@@ -170,8 +180,8 @@ if explore:
     sns.kdeplot(imputed_df['Ter'])
     plt.title('Simulated non-decision times')
     plt.figure()
-    sns.kdeplot(imputed_df['Var_Alpha'])
-    plt.title('Imputed trial-to-trial variance of boundaries')
+    sns.kdeplot(imputed_df['Std_Alpha'])
+    plt.title('Imputed trial-to-trial standard deviation of boundaries')
     plt.figure()
     sns.kdeplot(imputed_df['Dc'])
     plt.title('Simulated start points')
@@ -196,20 +206,18 @@ if explore:
     num_missing = np.sum(imputed_choicert == 0)
     print(f'There are {num_missing} trials generated')
 
-########### UNFINISHED FROM HERE ######
-
 # MODEL FITTING
 
 # Fit the model to the data
 status = trainer.load_pretrained_network()
 
 # Create numpy array of necessary data
-input_data = np.column_stack((imputed_choicert,all_standard_Pe)) 
+input_data = np.column_stack((imputed_choicert,alpha_like_Pe)) 
 
 
 # Fit the model per participant and keep track of posterior distributions
 num_posterior_draws = 1000
-all_posteriors = np.ones((nsubs, num_posterior_draws, 6))*np.nan
+all_posteriors = np.ones((nsubs, num_posterior_draws, 8))*np.nan
 part_track = 0
 for part in np.unique(base_df['subj_idx']):
     these_trials = (base_df['subj_idx'] == part)
@@ -225,13 +233,19 @@ for part in np.unique(base_df['subj_idx']):
     # Obtain posterior samples
     post_samples = amortizer.sample(configured_dict, num_posterior_draws)
 
-    all_posteriors[part_track, :, 0:6] = post_samples
+    all_posteriors[part_track, :, 0:7] = post_samples
     part_track += 1
 
-
+# Calculate percentage of cognitive variance explained
+data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
+data1_total_var_samples = (data1_cognitive_var_samples + 
+    all_posteriors[:, :, 6]**2)
+data1_cognitive_prop_samples = (data1_cognitive_var_samples / 
+    data1_total_var_samples)
+all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
 # Plot the results
-
+print('Making recovery plots.')
 plot_path = f"recovery_plots/{model_name}"
 
 param_means = all_posteriors.mean(axis=1)
@@ -241,7 +255,7 @@ recovery_scatter(np.array(imputed_df[['Drift', 'Dc', 'Mu_Alpha', 'Beta', 'Ter']]
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
+plt.savefig(f"{plot_path}/{model_name}_recovery_short_imputed.png")
 
 
 plt.figure()
@@ -283,11 +297,11 @@ plt.close()
 
 plt.figure()
 recovery(all_posteriors[:, :, 4, None],
-    imputed_df['Var_Alpha'])
+    imputed_df['Std_Alpha'])
 plt.xlabel('True')
 plt.ylabel('Posterior')
-plt.title('Trial-to-trial variance in boundary')
-plt.savefig(f'{plot_path}/{model_name}_boundary_var_imputed.png')
+plt.title('Trial-to-trial standard deviation of boundaries')
+plt.savefig(f'{plot_path}/{model_name}_boundary_std_imputed.png')
 plt.close()
 
 plt.figure()
@@ -298,6 +312,18 @@ plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Diffusion coefficient')
 plt.savefig(f'{plot_path}/{model_name}_DC_imputed.png')
+plt.close()
+
+plt.figure()
+jellyfish(all_posteriors[:,:,6,None])
+plt.xlabel('Noise in data1 not related to boundary')
+plt.savefig(f'{plot_path}/{model_name}_data1Noise_imputed.png')
+plt.close()
+
+plt.figure()
+jellyfish(all_posteriors[:,:,7,None])
+plt.xlabel('Proportion of data1 related to single-trial boundary')
+plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_imputed.png')
 plt.close()
 
 print('Making 2D plots.')
