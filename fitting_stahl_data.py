@@ -7,6 +7,7 @@
 # 21-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standnorm
 # 22-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standard
 #              ***Scale data across participants and not within participants
+# 23-Feb-2024     Michael D. Nunez   Invert Pe/c to match results of Mattes et al. 2022
 
 # Academic references:
 #
@@ -46,15 +47,19 @@ from single_trial_alpha_not_scaled import (
     amortizer
 )
 
-#model_name = 'single_trial_alpha_standard'
+# INITIALS
+
 model_name = 'single_trial_alpha_not_scaled'
 
 # What data to fit?
 fit_Pe = True
+fit_invert = True
 fit_fake = False
 
-# DATA LOADING
+# Make plots and check input data
 explore = False
+
+# DATA LOADING
 
 # Load base data from Mattes et al. (2022)
 # Originally data from Stahl et al. (2015)
@@ -109,6 +114,13 @@ base_df['alpha_like_fake'] = RNG.normal(1.0, 1/3,
     size=np.size(base_df['alpha_like_Pe']))
 
 
+# Invert external correlates to match results of Mattes et al. 2022
+invert_residuals = -1*residuals
+normalized_invert_Pe = ((invert_residuals - np.mean(invert_residuals))/
+    np.std(invert_residuals))
+alpha_invert_Pe = (normalized_invert_Pe + 3)/3 
+base_df['alpha_invert_Pe'] = alpha_invert_Pe
+
 
 # Explore the newly created data
 if explore:
@@ -121,10 +133,16 @@ if explore:
     print(np.any(np.isnan(base_df['alpha_like_Pe'])))
     plt.figure()
     plt.hist(first_norm)
+    first_invert = base_df['alpha_invert_Pe'][where_first]
+    print(np.mean(first_invert))
+    print(np.std(first_invert))
+    print(np.any(np.isnan(base_df['alpha_invert_Pe'])))
+    plt.figure()
+    plt.hist(first_invert)
     first_fake = base_df['alpha_like_fake'][where_first]
     plt.figure()
     plt.hist(first_fake)
-    sub_df = base_df.iloc[:, -7:]
+    sub_df = base_df.iloc[:, -8:]
     print(sub_df.head())
     print(sub_df.info())
     corr_matrix = sub_df.corr()
@@ -143,16 +161,15 @@ base_df['choicert'] = base_df['rt']*(2*base_df['response'] - 1)
 
 # Create numpy array of necessary data
 if fit_Pe:
-    if model_name == 'single_trial_alpha_not_scaled':
-        if fit_fake:
-            print('Fitting model to fake data on chosen alpha scale')
-            base_data_bf = np.array(base_df[['choicert','alpha_like_fake']])
-        else:
-            print('Fitting model to normalized pre Pe data, on chosen alpha scale')
-            base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']])
-    else: 
-        print('Fitting model to normalized pre Pe data, without influence of Ne...')  
-        base_data_bf = np.array(base_df[['choicert','normalized_pre_Pe_no_Ne']])
+    if fit_fake:
+        print('Fitting model to fake data on chosen alpha scale')
+        base_data_bf = np.array(base_df[['choicert','alpha_like_fake']])
+    elif fit_invert:
+        print('Fitting model to normalized negative pre Pe data, on chosen alpha scale')
+        base_data_bf = np.array(base_df[['choicert','alpha_invert_Pe']])
+    else:
+        print('Fitting model to normalized pre Pe data, on chosen alpha scale')
+        base_data_bf = np.array(base_df[['choicert','alpha_like_Pe']])
 else:
     print('Fitting model to normalized pre Ne data...')
     base_data_bf = np.array(base_df[['choicert','normalized_Ne']])
@@ -200,17 +217,17 @@ data1_cognitive_prop_samples = (data1_cognitive_var_samples /
     data1_total_var_samples)
 all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
+# ASSESSMENT OF RESULTS
 
 # Plot the results
 print('Making jellyfish plots.')
 if fit_Pe:
-    if model_name == 'single_trial_alpha_not_scaled':
-        if fit_fake:
-            plot_path = f"data_plots/{model_name}/using_alpha_like_fake/"
-        else:
-            plot_path = f"data_plots/{model_name}/using_alpha_like_Pe/"
+    if fit_fake:
+        plot_path = f"data_plots/{model_name}/using_alpha_like_fake/"
+    elif fit_invert:
+        plot_path = f"data_plots/{model_name}/using_alpha_invert_Pe/"
     else:
-        plot_path = f"data_plots/{model_name}/using_normalized_pre_Pe_no_Ne/"
+        plot_path = f"data_plots/{model_name}/using_alpha_like_Pe/"
 else:
     plot_path = f"data_plots/{model_name}/using_normalized_Ne/"
 if not os.path.exists(plot_path):
@@ -355,3 +372,14 @@ ax.view_init(elev=elevation, azim=azimuth)
 
 plt.savefig(f"{plot_path}/{model_name}_3d_posterior_stahl_base.png", 
     dpi=300, bbox_inches="tight", pad_inches=0.5)
+
+
+# Report the estimates of proportion of cognitive variance
+param_means = all_posteriors.mean(axis=1)
+prop_cog_var_means = param_means[:, 7]
+print(f'The mean r is {np.mean(prop_cog_var_means)}.')
+print(f'The std of r is {np.std(prop_cog_var_means)}.')
+print(f'The max r is {np.max(prop_cog_var_means)}')
+print(f'The min r is {np.min(prop_cog_var_means)}')
+print(f'The number of r > 0.2 is {np.sum(prop_cog_var_means > 0.2)}')
+print(f'The number of total subjects was {nsubs}')

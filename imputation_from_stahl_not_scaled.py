@@ -3,6 +3,7 @@
 # Date              Programmers                 Descriptions of Change
 # ====            ================              ======================
 # 22-Feb-2024     Michael D. Nunez        Converted from imputation_from_stahl
+# 23-Feb-2024     Michael D. Nunez   Add option to randomly shift true extdata 
 
 # Academic references:
 #
@@ -36,13 +37,18 @@ from single_trial_alpha_not_scaled import (
     amortizer
 )
 
-
+# FLAGS
 model_name = 'single_trial_alpha_not_scaled'
 
+# Impute with simualated true boundaries
+force_differences = False
 
-# DATA LOADING
+# Explore the data
 explore = False
 
+RNG = np.random.default_rng(2024)
+
+# DATA LOADING
 # Load base data from Mattes et al. (2022)
 # Originally data from Stahl et al. (2015)
 base_df = pd.read_csv('stahl_data/base_data.csv')
@@ -63,6 +69,14 @@ if explore:
     plt.figure()
     plt.hist(all_Pe)
     plt.title('Histogram of all Pe/c across participants and trials')
+
+# Force differences between participants in the data
+if force_differences:
+    print(f'Simulating differences between participants Pe/c.')
+    for part in np.unique(base_df['subj_idx']):
+        these_trials = (base_df['subj_idx'] == part)
+        all_Pe[these_trials] = ( all_Pe[these_trials] + 
+            RNG.normal(0, np.std(all_Pe)) )
 
 # Input to model fits
 all_standard_Pe = (all_Pe - np.mean(all_Pe)) / np.std(all_Pe)
@@ -139,7 +153,6 @@ def truncnorm_better(mean=0, sd=1, low=-10, upp=10, size=1):
 
 
 # Generate simulated and imputed variables
-RNG = np.random.default_rng(2024)
 imputed_df = pd.DataFrame(index=range(nsubs), 
     columns=['PartID','Drift', 'Mu_Alpha', 'Beta', 'Ter', 'Std_Alpha', 'Dc'
     'Sigma1', 'Prop_cog_var'])
@@ -244,9 +257,17 @@ data1_cognitive_prop_samples = (data1_cognitive_var_samples /
     data1_total_var_samples)
 all_posteriors[:, :, 7] = data1_cognitive_prop_samples
 
+
+# ASSESSMENT OF RESULTS
+
 # Plot the results
 print('Making recovery plots.')
 plot_path = f"recovery_plots/{model_name}"
+
+if force_differences:
+    savelabel = 'simdiff'
+else:
+    savelabel = 'imputed'
 
 param_means = all_posteriors.mean(axis=1)
 # Plot true versus estimated for a subset of parameters
@@ -255,7 +276,7 @@ recovery_scatter(np.array(imputed_df[['Drift', 'Dc', 'Mu_Alpha', 'Beta', 'Ter']]
                   ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
                   'Start Point', 'Non-Decision Time'],
                   font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
-plt.savefig(f"{plot_path}/{model_name}_recovery_short_imputed.png")
+plt.savefig(f"{plot_path}/{model_name}_recovery_short_{savelabel}.png")
 
 
 plt.figure()
@@ -265,7 +286,7 @@ recovery(all_posteriors[:, :, 0, None],
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Drift')
-plt.savefig(f'{plot_path}/{model_name}_Drift_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_Drift_{savelabel}.png')
 plt.close()
 
 plt.figure()
@@ -274,7 +295,7 @@ recovery(all_posteriors[:, :, 1, None],
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Boundary')
-plt.savefig(f'{plot_path}/{model_name}_Boundary_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_Boundary_{savelabel}.png')
 plt.close()
 
 plt.figure()
@@ -283,7 +304,7 @@ recovery(all_posteriors[:, :, 2, None],
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Relative Start Point')
-plt.savefig(f'{plot_path}/{model_name}_StartPoint_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_StartPoint_{savelabel}.png')
 plt.close()
 
 plt.figure()
@@ -292,7 +313,7 @@ recovery(all_posteriors[:, :, 3, None],
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Non-decision time')
-plt.savefig(f'{plot_path}/{model_name}_NDT_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_NDT_{savelabel}.png')
 plt.close()
 
 plt.figure()
@@ -301,7 +322,7 @@ recovery(all_posteriors[:, :, 4, None],
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Trial-to-trial standard deviation of boundaries')
-plt.savefig(f'{plot_path}/{model_name}_boundary_std_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_boundary_std_{savelabel}.png')
 plt.close()
 
 plt.figure()
@@ -311,19 +332,22 @@ plt.ylim(0.0, 2.5)
 plt.xlabel('True')
 plt.ylabel('Posterior')
 plt.title('Diffusion coefficient')
-plt.savefig(f'{plot_path}/{model_name}_DC_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_DC_{savelabel}.png')
 plt.close()
 
+
 plt.figure()
+# Not much difference in real parameters across participants
 jellyfish(all_posteriors[:,:,6,None])
 plt.xlabel('Noise in data1 not related to boundary')
-plt.savefig(f'{plot_path}/{model_name}_data1Noise_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_data1Noise_{savelabel}.png')
 plt.close()
 
 plt.figure()
+# Not much difference in real parameters across participants
 jellyfish(all_posteriors[:,:,7,None])
 plt.xlabel('Proportion of data1 related to single-trial boundary')
-plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_imputed.png')
+plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_{savelabel}.png')
 plt.close()
 
 print('Making 2D plots.')
@@ -333,19 +357,19 @@ plot_posterior2d(all_posteriors[0:nplots, :, 5].squeeze(),
     all_posteriors[0:nplots, :, 1].squeeze(),
    ['Diffusion coefficient', 'Boundary'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_imputed.png")
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_{savelabel}.png")
 
 plot_posterior2d(all_posteriors[0:nplots, :, 0].squeeze(),
     all_posteriors[0:nplots, :, 1].squeeze(),
    ['Drift rate', 'Boundary'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_imputed.png")
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_{savelabel}.png")
 
 plot_posterior2d(all_posteriors[0:nplots, :, 5].squeeze(),
     all_posteriors[0:nplots, :, 0].squeeze(),
    ['Diffusion coefficient', 'Drift rate'],
    font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_imputed.png")
+plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_{savelabel}.png")
 
 
 # Plot a 3D joint posterior
@@ -394,5 +418,15 @@ elevation = 20  # Default elevation
 azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
 ax.view_init(elev=elevation, azim=azimuth)
 
-plt.savefig(f"{plot_path}/{model_name}_3d_posterior_imputed.png", 
+plt.savefig(f"{plot_path}/{model_name}_3d_posterior_{savelabel}.png", 
     dpi=300, bbox_inches="tight", pad_inches=0.5)
+
+# Report the estimates of proportion of cognitive variance
+param_means = all_posteriors.mean(axis=1)
+prop_cog_var_means = param_means[:, 7]
+print(f'The mean r is {np.mean(prop_cog_var_means)}.')
+print(f'The std of r is {np.std(prop_cog_var_means)}.')
+print(f'The max r is {np.max(prop_cog_var_means)}')
+print(f'The min r is {np.min(prop_cog_var_means)}')
+print(f'The number of r > 0.2 is {np.sum(prop_cog_var_means > 0.2)}')
+print(f'The number of total subjects was {nsubs}')
