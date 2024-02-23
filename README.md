@@ -1,5 +1,5 @@
 # bayesflow_nddms
-#### (Repository version 0.6.1)
+#### (Repository version 0.6.2)
 Repository for fitting Drift-Diffusion models with identifiable within-trial noise parameters in Python using BayesFlow
 
 **Authors: Michael D. Nunez from the Psychological Methods group at the University of Amsterdam**
@@ -13,7 +13,7 @@ Nunez, M. D., Schubert, A.-L., Frischkorn, G. T., & Oberauer, K. (2023). [Cognit
 
 [BayesFlow](https://github.com/stefanradev93/BayesFlow)
 
-See [BayesFlow install instructions](https://github.com/stefanradev93/BayesFlow/edit/master/INSTALL.rst) to create a BayesFlow conda environment for the most stable method to run these scripts. It is also recommended to keep a local version of BayesFlow on your computer because the package is being actively developed. For this project, I used BayesFlow version 1.1 with Python 3.10.
+See [BayesFlow install instructions](https://github.com/stefanradev93/BayesFlow/blob/master/INSTALL.rst) to create a BayesFlow conda environment for the most stable method to run these scripts. It is also recommended to keep a local version of BayesFlow on your computer because the package is being actively developed. For this project, I used BayesFlow version 1.1 with Python 3.10.
 
 ### Downloading
 
