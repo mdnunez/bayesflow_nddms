@@ -1,0 +1,34 @@
+
+model {
+    
+    ##########
+    #Simple DDM parameter priors
+    ##########
+    for (p in 1:nparts) {
+    
+        #Boundary parameter (speed-accuracy tradeoff) per participant
+        alpha[p] ~ dnorm(1, pow(.5,-2))T(0, 10)
+
+        #Non-decision time per participant
+        ndt[p] ~ dnorm(.5, pow(.25,-2))T(0, 1.5)
+
+        #Start point bias towards choice A per participant
+        beta[p] ~ dbeta(2, 2)
+
+        #Drift rate to choice A per participant
+        delta[p] ~ dnorm(0, pow(2, -2))
+
+        #Diffusion coefficient per participant
+        varsigma[p] ~ dnorm(1, pow(.5,-2))T(0, 10)
+
+    }
+
+    ##########
+    # Wiener likelihood
+    for (i in 1:N) {
+
+        # Observations of accuracy*RT for DDM process of rightward/leftward RT
+        y[i] ~ dwiener(alpha[participant[i]]/varsigma[participant[i]], ndt[participant[i]], beta[participant[i]], delta[participant[i]]/varsigma[participant[i]])
+
+    }
+}

@@ -3,4 +3,5 @@ __pycache__/*
 recovery_plots/*
 checkpoint/*
 data_plots/*
+data/*
 from_snellius.sh
