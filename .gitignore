@@ -4,4 +4,5 @@ recovery_plots/*
 checkpoint/*
 data_plots/*
 data/*
+modelfits/*
 from_snellius.sh
