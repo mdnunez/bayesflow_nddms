@@ -5,6 +5,7 @@
 # 20-March-23     Michael        Basic DDM with the diffusion coefficient free to vary
 # 22-March-23   Michael D. Nunez    Insert flag for when fitter is trained, new plots
 # 06-Sept-23    Michael Nunez        Load pretrained network
+# 06-March-24   Michael Nunez  Generate 2d posterior plots with true values
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -29,9 +30,10 @@ import bayesflow as bf
 import matplotlib.pyplot as plt
 from pyhddmjagsutils import recovery, recovery_scatter, plot_posterior2d
 
-train_fitter = True
-num_epochs = 500
 
+num_epochs = 500
+train_fitter = False
+make_recovery_plots = False
 
 
 # Get the filename of the currently running script
@@ -204,201 +206,224 @@ if train_fitter:
 else:
     status = trainer.load_pretrained_network()
 
+if make_recovery_plots:
+    # Computational Adequacy
+    num_test = 500
+    num_posterior_draws = 10000
 
-# Computational Adequacy
-num_test = 500
-num_posterior_draws = 10000
-
-# Need to test for different Ns, which is what the following code does
-param_samples = np.empty((num_test, num_posterior_draws, num_params))
-true_params = np.empty((num_test, num_params))
-simulated_trial_nums = np.empty((num_test))
-np.random.seed(2023) # Set the random seed to generate the same plots every time
-for i in range(num_test):
-    model_sims = configurator(generative_model(1))
-    simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
-    true_params[i, :] = model_sims['parameters']
-    param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
-
-
-print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
-    (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
-
-# BayesFlow native recovery plot
-fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
-    ['drift', 'boundary', 'beta', 'tau', 'dc'])
-fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
+    # Need to test for different Ns, which is what the following code does
+    param_samples = np.empty((num_test, num_posterior_draws, num_params))
+    true_params = np.empty((num_test, num_params))
+    simulated_trial_nums = np.empty((num_test))
+    np.random.seed(2023) # Set the random seed to generate the same plots every time
+    for i in range(num_test):
+        model_sims = configurator(generative_model(1))
+        simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
+        true_params[i, :] = model_sims['parameters']
+        param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
 
 
-# Posterior means
-param_means = param_samples.mean(axis=1)
+    print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
+        (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
 
-# Find the index of clearly good posterior means of tau (inside the prior range)
-converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
-print('%d of %d model fits were in the prior range for non-decision time' % 
-    (np.sum(converged), converged.shape[0]))
+    # BayesFlow native recovery plot
+    fig = bf.diagnostics.plot_recovery(param_samples, true_params, param_names =
+        ['drift', 'boundary', 'beta', 'tau', 'dc'])
+    fig.savefig(f"{plot_path}/{model_name}_true_vs_estimate.png")
 
 
-# Plot true versus estimated for a subset of parameters
-recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][:, :],
-                  param_means[:, np.array([0, 4, 1, 2, 3])][:, :],
-                  ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
-                  'Start Point', 'Non-Decision Time'],
-                  font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
-plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
+    # Posterior means
+    param_means = param_samples.mean(axis=1)
 
-# Plot the results
-plt.figure()
-# Use None to add singleton dimension for recovery which expects multiple chains
-recovery(param_samples[:, :, 0, None],
-    true_params[:, 0].squeeze())
-plt.ylim(-6, 6)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Drift')
-plt.savefig(f'{plot_path}/{model_name}_Drift.png')
-plt.close()
+    # Find the index of clearly good posterior means of tau (inside the prior range)
+    converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
+    print('%d of %d model fits were in the prior range for non-decision time' % 
+        (np.sum(converged), converged.shape[0]))
 
-plt.figure()
-recovery(param_samples[:, :, 1, None],
-    true_params[:, 1].squeeze())
-plt.ylim(0.0, 2.5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Boundary')
-plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
-plt.close()
 
-plt.figure()
-recovery(param_samples[:, :, 2, None],
-    true_params[:, 2].squeeze())
-plt.ylim(0.0, 1.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Relative Start Point')
-plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
-plt.close()
+    # Plot true versus estimated for a subset of parameters
+    recovery_scatter(true_params[:, np.array([0, 4, 1, 2, 3])][:, :],
+                      param_means[:, np.array([0, 4, 1, 2, 3])][:, :],
+                      ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
+                      'Start Point', 'Non-Decision Time'],
+                      font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
+    plt.savefig(f"{plot_path}/{model_name}_recovery_short.png")
 
-plt.figure()
-recovery(param_samples[:, :, 3, None],
-    true_params[:, 3].squeeze())
-plt.ylim(0.0, 1.0)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Non-decision time')
-plt.savefig(f'{plot_path}/{model_name}_NDT.png')
-plt.close()
+    # Plot the results
+    plt.figure()
+    # Use None to add singleton dimension for recovery which expects multiple chains
+    recovery(param_samples[:, :, 0, None],
+        true_params[:, 0].squeeze())
+    plt.ylim(-6, 6)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Drift')
+    plt.savefig(f'{plot_path}/{model_name}_Drift.png')
+    plt.close()
 
-plt.figure()
-recovery(param_samples[:, :, 4, None],
-    true_params[:, 4].squeeze())
-plt.ylim(0.0, 2.5)
-plt.xlabel('True')
-plt.ylabel('Posterior')
-plt.title('Diffusion coefficient')
-plt.savefig(f'{plot_path}/{model_name}_DC.png')
-plt.close()
+    plt.figure()
+    recovery(param_samples[:, :, 1, None],
+        true_params[:, 1].squeeze())
+    plt.ylim(0.0, 2.5)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Boundary')
+    plt.savefig(f'{plot_path}/{model_name}_Boundary.png')
+    plt.close()
 
-scatter_color = '#ABB0B8'
+    plt.figure()
+    recovery(param_samples[:, :, 2, None],
+        true_params[:, 2].squeeze())
+    plt.ylim(0.0, 1.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Relative Start Point')
+    plt.savefig(f'{plot_path}/{model_name}_StartPoint.png')
+    plt.close()
 
-# By default plot only the first 18 random posterior draws
-nplots = 18
-plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
-    param_samples[0:nplots, :, 1].squeeze(),
-   ['Diffusion coefficient', 'Boundary'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
+    plt.figure()
+    recovery(param_samples[:, :, 3, None],
+        true_params[:, 3].squeeze())
+    plt.ylim(0.0, 1.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Non-decision time')
+    plt.savefig(f'{plot_path}/{model_name}_NDT.png')
+    plt.close()
 
-plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
-    param_samples[0:nplots, :, 1].squeeze(),
-   ['Drift rate', 'Boundary'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift.png")
+    plt.figure()
+    recovery(param_samples[:, :, 4, None],
+        true_params[:, 4].squeeze())
+    plt.ylim(0.0, 2.5)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Diffusion coefficient')
+    plt.savefig(f'{plot_path}/{model_name}_DC.png')
+    plt.close()
 
-plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
-    param_samples[0:nplots, :, 0].squeeze(),
-   ['Diffusion coefficient', 'Drift rate'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc.png")
+    scatter_color = '#ABB0B8'
 
-plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
-    param_samples[0:nplots, :, 0].squeeze(),
-   ['Non-decision time', 'Drift rate'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt.png")
+    # Plot a 3D joint posterior for one simulated dataset, draw index 13
+    draw3d = 13
 
-plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
-    param_samples[0:nplots, :, 1].squeeze(),
-   ['Non-decision time', 'Boundary'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt.png")
+    # By default plot only the first 18 random posterior draws
+    nplots = 18
+    plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
+        param_samples[0:nplots, :, 1].squeeze(),
+       ['Diffusion coefficient', 'Boundary'], 
+       true_params=true_params[0:nplots, np.array([4, 1])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc.png")
 
-plot_posterior2d(param_samples[0:nplots, :, 2].squeeze(),
-    param_samples[0:nplots, :, 1].squeeze(),
-   ['Start point', 'Boundary'],
-   font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
-plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start.png")
+    plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
+        param_samples[0:nplots, :, 1].squeeze(),
+       ['Drift rate', 'Boundary'],
+       true_params=true_params[0:nplots, np.array([0, 1])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift.png")
 
-appendix_text = rf"""
-The mean and standard deviation of number of simulated trials were $
-{int(np.mean(simulated_trial_nums[0:nplots]))} \pm {int(np.std(simulated_trial_nums[0:nplots]))}$.
-"""
+    plot_posterior2d(param_samples[0:nplots, :, 4].squeeze(),
+        param_samples[0:nplots, :, 0].squeeze(),
+       ['Diffusion coefficient', 'Drift rate'],
+       true_params=true_params[0:nplots, np.array([4, 0])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc.png")
 
-print(appendix_text)
+    plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
+        param_samples[0:nplots, :, 0].squeeze(),
+       ['Non-decision time', 'Drift rate'],
+       true_params=true_params[0:nplots, np.array([3, 0])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt.png")
 
-# Plot a 3D joint posterior
-fig = plt.figure(figsize=(10,10))
-ax = fig.add_subplot(111, projection='3d')
+    plot_posterior2d(param_samples[0:nplots, :, 3].squeeze(),
+        param_samples[0:nplots, :, 1].squeeze(),
+       ['Non-decision time', 'Boundary'],
+       true_params=true_params[0:nplots, np.array([3, 1])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt.png")
 
-main_color = '#332288'
-secondary_color = '#ABB0B8'
+    plot_posterior2d(param_samples[0:nplots, :, 2].squeeze(),
+        param_samples[0:nplots, :, 1].squeeze(),
+       ['Start point', 'Boundary'],
+       true_params=true_params[0:nplots, np.array([2, 1])],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
+    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start.png")
 
-# By default plot only one random posterior draws, draw 7
-rand_draw = 13
+    appendix_text = rf"""
+    The mean and standard deviation of number of simulated trials were $
+    {int(np.mean(simulated_trial_nums[0:nplots]))} \pm {int(np.std(simulated_trial_nums[0:nplots]))}$.
+    """
 
-# Main 3D scatter plot
-ax.scatter(param_samples[rand_draw, :, 0].squeeze(),
-           param_samples[rand_draw, :, 1].squeeze(),
-           param_samples[rand_draw, :, 4].squeeze(), alpha=0.25, color=main_color)
+    print(appendix_text)
 
-# 2D scatter plot for drift rate and boundary (xy plane) at min diffusion coefficient
-min_dc = param_samples[rand_draw, :, 4].min()
-ax.scatter(param_samples[rand_draw, :, 0].squeeze(), param_samples[rand_draw, :, 1].squeeze(), 
-    min_dc, alpha=0.25, color=secondary_color)
+    # Plot a 3D joint posterior
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111, projection='3d')
 
-# 2D scatter plot for drift rate and diffusion coefficient (xz plane) at max boundary
-max_boundary = param_samples[rand_draw, :, 1].max()
-ax.scatter(param_samples[rand_draw, :, 0].squeeze(), max_boundary, 
-    param_samples[rand_draw, :, 4].squeeze(), alpha=0.25, color=secondary_color)
+    main_color = '#332288'
+    secondary_color = '#ABB0B8'
 
-# 2D scatter plot for boundary and diffusion coefficient (yz plane) at min drift rate
-min_drift_rate = param_samples[rand_draw, :, 0].min()
-ax.scatter(min_drift_rate, param_samples[rand_draw, :, 1].squeeze(), 
-    param_samples[rand_draw, :, 4].squeeze(), alpha=0.25, color=secondary_color)
+    # Main 3D scatter plot
+    ax.scatter(param_samples[draw3d, :, 0].squeeze(),
+               param_samples[draw3d, :, 1].squeeze(),
+               param_samples[draw3d, :, 4].squeeze(), alpha=0.25, color=main_color)
 
-ax.set_xlabel(r'Drift rate ($\delta$)', fontsize=16, labelpad=10)
-ax.set_ylabel(r'Boundary ($\alpha$)', fontsize=16, labelpad=10)
-ax.set_zlabel(r'Diffusion coefficient ($\varsigma$)', fontsize=16, labelpad=10)
+    # 2D scatter plot for drift rate and boundary (xy plane) at min diffusion coefficient
+    min_dc = param_samples[draw3d, :, 4].min()
+    ax.scatter(param_samples[draw3d, :, 0].squeeze(), param_samples[draw3d, :, 1].squeeze(), 
+        min_dc, alpha=0.25, color=secondary_color)
 
-# Rotate the plot slightly clockwise around the z-axis
-elevation = 20  # Default elevation
-azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
-ax.view_init(elev=elevation, azim=azimuth)
+    # 2D scatter plot for drift rate and diffusion coefficient (xz plane) at max boundary
+    max_boundary = param_samples[draw3d, :, 1].max()
+    ax.scatter(param_samples[draw3d, :, 0].squeeze(), max_boundary, 
+        param_samples[draw3d, :, 4].squeeze(), alpha=0.25, color=secondary_color)
 
-plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
-    bbox_inches="tight", pad_inches=0.5)
+    # 2D scatter plot for boundary and diffusion coefficient (yz plane) at min drift rate
+    min_drift_rate = param_samples[draw3d, :, 0].min()
+    ax.scatter(min_drift_rate, param_samples[draw3d, :, 1].squeeze(), 
+        param_samples[draw3d, :, 4].squeeze(), alpha=0.25, color=secondary_color)
 
-publication_text = rf"""
-Draws from a joint posterior distribution for one simulated data set from a DDM with all three 
-parameters free to vary (purple 3D scatter plot). Paired joint distributions are given by the grey projections
-on each of the three faces. The joint posterior distribution is driven mostly by the joint likelihood
-of the data (N={int(simulated_trial_nums[rand_draw])}) given the model (Model dcDDM). The prior distributions 
-(though not influential) for Model dcDDM are given in the text. The posterior shape will be different for each data set 
-(see Figure for paired posterior distributions). The true 5-dimension joint posterior distribution also includes the 
-relative start point and non-decision time. The mean posteriors of those two parameters were 
-$\hat\tau={np.mean(param_samples[rand_draw, :, 3]):.3}$ seconds and $\hat\beta={np.mean(param_samples[rand_draw, :, 2]):.2f}$ 
-proportion of boundary in this simulation respectively. The drift rate $\delta$ and diffusion coefficients $\varsigma$ are in are 
-evidence units per second while the boundary $\alpha$ is in evidence units.
-"""
+    # # Plot true value on top of scatter plot
+    # ax.scatter(true_params[draw3d, 0],
+    #            true_params[draw3d, 1],
+    #            true_params[draw3d, 4], color='black')
+    # ax.scatter(true_params[draw3d, 0], true_params[draw3d, 1], 
+    #     min_dc, color='black')
+    # ax.scatter(true_params[draw3d, 0], max_boundary, 
+    #     true_params[draw3d, 4], color='black')
+    # ax.scatter(min_drift_rate, true_params[draw3d, 1], 
+    #     true_params[draw3d, 4], color='black')
 
-print(publication_text)
+    ax.set_xlabel(r'Drift rate ($\delta$)', fontsize=16, labelpad=10)
+    ax.set_ylabel(r'Boundary ($\alpha$)', fontsize=16, labelpad=10)
+    ax.set_zlabel(r'Diffusion coefficient ($\varsigma$)', fontsize=16, labelpad=10)
+
+    # Rotate the plot slightly clockwise around the z-axis
+    elevation = 20  # Default elevation
+    azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
+    ax.view_init(elev=elevation, azim=azimuth)
+
+    plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=300,
+        bbox_inches="tight", pad_inches=0.5)
+
+    publication_text = rf"""
+    Draws from a joint posterior distribution for one simulated data set from a DDM with all three 
+    parameters free to vary (purple 3D scatter plot). Paired joint distributions are given by the grey projections
+    on each of the three faces. The joint posterior distribution is driven mostly by the joint likelihood
+    of the data (N={int(simulated_trial_nums[draw3d])}) given the model (Model dcDDM). The prior distributions 
+    (though not influential) for Model dcDDM are given in the text. The posterior shape will be different for each data set 
+    (see Figure for paired posterior distributions). The true 5-dimension joint posterior distribution also includes the 
+    relative start point and non-decision time. The mean posteriors of those two parameters were 
+    $\hat\tau={np.mean(param_samples[draw3d, :, 3]):.3}$ seconds and $\hat\beta={np.mean(param_samples[draw3d, :, 2]):.2f}$ 
+    proportion of boundary in this simulation respectively. The drift rate $\delta$ and diffusion coefficients $\varsigma$ are in are 
+    evidence units per second while the boundary $\alpha$ is in evidence units.
+    """
+
+    print(publication_text)

@@ -20,16 +20,17 @@
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
 # 06/29/20(US)  Michael Nunez                             Original code
-# 12/04/20(US)  Michael Nunez              Update explanation of summary output
-# 01/14/21(US)  Michael Nunez             Add simuldiff2ndt() and flipstanout()
+# 12/04/20(US)  Michael Nunez             Update explanation of summary output
+# 01/14/21(US)  Michael Nunez            Add simuldiff2ndt() and flipstanout()
 # 02/10/21(US)  Michael Nunez                 Add logwienerpdf
 # 07/19/21(US)  Michael Nunez               Remove unnecessary imports
 # 25-April-2022 Michael Nunez                   Remove use of numba
 # 13-March-2023 Michael Nunez                 Add recovery_scatter()
-# 31-July-2023  Michael Nunez           ERC interview flag for recovery_scatter()
-# 06-Sept-23    Michael Nunez      In recovery_scatter() print pearson correlation
+# 31-July-2023  Michael Nunez       ERC interview flag for recovery_scatter()
+# 06-Sept-23    Michael Nunez  In recovery_scatter() print pearson correlation
 # 15-Nov-23     Michael Nunez            grantB1 x&y limit changes
-# 21-Feb-23     Michael Nunez        Removing unused and unfinished functions
+# 21-Feb-24     Michael Nunez        Removing unused and unfinished functions
+# 06-March-24   Michael Nunez  Additional true_param input in plot_posterior2d
 
 
 # Modules
@@ -645,8 +646,10 @@ def recovery_scatter(theta_true, theta_est, param_names,
     f.tight_layout()
 
 
-def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, parameter2'],
-                      figsize=(20, 4), font_size=12, color='blue', alpha=0.25):
+def plot_posterior2d(posteriors1, posteriors2, 
+    param_names=['parameter1, parameter2'], true_params=None,
+    figsize=(20, 4), font_size=12, color='blue', alpha=0.25, color2='red',
+    highlight=None, color3='#332288'):
     """ Plots a scatter plot of a joint posterior distributions
 
     Parameters
@@ -655,6 +658,8 @@ def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, paramet
         Array of marginal posteriors
     posteriors2: np.array
         Array of marginal posteriors
+    true_params: np.array
+        Array of true parameter values
     param_names: list(str)
         List of two parameter names
     figsize: tuple(int, int), default: (20,4)
@@ -677,6 +682,12 @@ def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, paramet
     if posteriors1.shape[0] > 20:
         raise ValueError("The function would be making more than 20 subplots")
 
+    if true_params is not None:
+        if true_params.ndim > 2:
+            raise ValueError("true_params array has more than 2 dimensions")
+        if true_params.shape[1] != 2:
+            raise ValueError("true_params should have a second dimension of length 2")
+
     # Plot settings
     plt.rcParams['font.size'] = font_size
 
@@ -694,28 +705,52 @@ def plot_posterior2d(posteriors1, posteriors2, param_names=['parameter1, paramet
         
     # --- Plot true vs estimated posterior means on a single row --- #
     for j in range(num_plots):
+        # Place highlighted subplot first
+        if highlight is not None and (highlight<num_plots):
+            if (j > highlight):
+                k = j
+            elif (j < highlight):
+                k = j+1
+            else:
+                k = 0
+        else:
+            k = j
         
         # Plot analytic vs estimated
-        axarr[j].scatter(posteriors1[j, :], posteriors2[j, :], color=color, alpha=alpha)
+        axarr[k].scatter(posteriors1[j, :], posteriors2[j, :], color=color, 
+            alpha=alpha)
+
+        if true_params is not None:
+            axarr[k].scatter(true_params[j, 0], true_params[j, 1], color=color2)
         
         # Compute correlation
         pearson, pvalue = stats.pearsonr(posteriors1[j, :], posteriors2[j, :])
-        axarr[j].text(0.1, 0.8, '$\\rho$={:.3f}'.format(pearson),
+        axarr[k].text(0.1, 0.8, '$\\rho$={:.3f}'.format(pearson),
                      horizontalalignment='left',
                      verticalalignment='center',
-                     transform=axarr[j].transAxes, 
+                     transform=axarr[k].transAxes, 
                      size=font_size)
         
-        axarr[j].set_xlabel(f'{param_names[0]}', fontsize=font_size)
-        if np.mod(j,6) == 0:
-            # Label plot
-            axarr[j].set_ylabel(f'{param_names[1]}',fontsize=font_size)
-        axarr[j].spines['right'].set_visible(False)
-        axarr[j].spines['top'].set_visible(False)
+        
+        if np.mod(k,6) == 0:
+            # Label y-axis
+            axarr[k].set_ylabel(f'{param_names[1]}',fontsize=font_size)
 
-   
+        if k >= (n_row-1)*6:
+            # Label x-axis
+            axarr[k].set_xlabel(f'{param_names[0]}', fontsize=font_size)
+
+        if j==highlight:
+            for spine in axarr[k].spines.values():
+                spine.set_visible(True)
+                spine.set_color(color3)
+                spine.set_linewidth(2)
+        else:
+            axarr[k].spines['right'].set_visible(False)
+            axarr[k].spines['top'].set_visible(False) 
     # Adjust spaces
     f.tight_layout()
+
 
 
 def rsquared_pred(trueval, predval):

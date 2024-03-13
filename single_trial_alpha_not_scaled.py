@@ -14,6 +14,9 @@
 # 02-Nov-23     Michael Nunez                Print publication text
 # 15-Nov-23     Michael Nunez            ercinterview = False
 # 14-Feb-24     Michael Nunez          test_misspecification flag
+# 06-March-24   Michael Nunez  Generate 2d posterior plots with true values
+# 08-March-24   Michael Nunez  Generate 3D posterior for low external data correlation
+
 
 # References:
 # https://github.com/stefanradev93/BayesFlow/blob/master/docs/source/tutorial_notebooks/LCA_Model_Posterior_Estimation.ipynb
@@ -438,6 +441,61 @@ if make_recovery_plots:
     plt.savefig(f'{plot_path}/{model_name}_data1prop_cog.png')
     plt.close()
 
+    # Plot where the proportion of cognitive variance in the external data is large
+    low_cog_sims = np.where((true_data1_cognitive_prop <= 0.1))[0]
+
+    # Plot a 3D joint posterior for one simulated dataset, draw index 7
+    draw3d = 7
+    rand_draw = low_cog_sims[draw3d]
+
+    # Plot a 3D joint posterior when 
+    fig = plt.figure(figsize=(10,10))
+    ax = fig.add_subplot(111, projection='3d')
+
+    main_color = '#332288'
+    secondary_color = '#ABB0B8'
+
+    # Main 3D scatter plot
+    ax.scatter(param_samples[rand_draw, :, 0].squeeze(),
+               param_samples[rand_draw, :, 1].squeeze(),
+               param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=main_color)
+
+    # 2D scatter plot for drift rate and boundary (xy plane) at min diffusion coefficient
+    min_dc = param_samples[rand_draw, :, 5].min()
+    ax.scatter(param_samples[rand_draw, :, 0].squeeze(), param_samples[rand_draw, :, 1].squeeze(), 
+        min_dc, alpha=0.25, color=secondary_color)
+
+    # 2D scatter plot for drift rate and diffusion coefficient (xz plane) at max boundary
+    max_boundary = param_samples[rand_draw, :, 1].max()
+    ax.scatter(param_samples[rand_draw, :, 0].squeeze(), max_boundary, 
+        param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=secondary_color)
+
+    # 2D scatter plot for boundary and diffusion coefficient (yz plane) at min drift rate
+    min_drift_rate = param_samples[rand_draw, :, 0].min()
+    ax.scatter(min_drift_rate, param_samples[rand_draw, :, 1].squeeze(), 
+        param_samples[rand_draw, :, 5].squeeze(), alpha=0.25, color=secondary_color)
+
+    ax.set_xlabel(r'Drift rate ($\delta$)', fontsize=16, labelpad=10)
+    ax.set_ylabel(r'Boundary ($\alpha$)', fontsize=16, labelpad=10)
+    ax.set_zlabel(r'Diffusion coefficient ($\varsigma$)', fontsize=16, labelpad=10)
+
+    # Rotate the plot slightly clockwise around the z-axis
+    elevation = 20  # Default elevation
+    azimuth = -30   # Rotate 30 degrees counterclockwise from the default azimuth (which is -90)
+    ax.view_init(elev=elevation, azim=azimuth)
+
+    plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc_low.png", dpi=300,
+        bbox_inches="tight", pad_inches=0.5)
+
+    publication_text = rf"""
+    Draws from a joint posterior distribution for one simulated data set from Model dcDDM-$\alpha z$ 
+    (purple 3D scatter plot) with $r={true_data1_cognitive_prop[rand_draw]}$. Pairwise joint distributions are given by the grey projections on each 
+    of the three faces. The joint posterior distribution is driven mostly by the joint likelihood of 
+    the data (N={int(simulated_trial_nums[rand_draw])}) given the model.  The 5-dimension joint posterior distribution also includes
+    the relative start point and non-decision time. The mean posteriors of those two parameters were 
+    $\hat\tau={np.mean(param_samples[rand_draw, :, 3]):.3}$ seconds and $\hat\beta={np.mean(param_samples[rand_draw, :, 2]):.2f}$ proportion of boundary in this simulation respectively.
+    """
+    print(publication_text)
 
     scatter_color = '#ABB0B8'
 
@@ -525,37 +583,49 @@ if make_recovery_plots:
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 5].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_high_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_high_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 5].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_high_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 3].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
        ['Non-decision time', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([3, 0])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt_high_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 3].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Non-decision time', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([3, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt_high_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 2].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Start point', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([2, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start_high_prop.png")
 
     appendix_text = rf"""
@@ -653,42 +723,57 @@ if make_recovery_plots:
     plt.savefig(f'{plot_path}/{model_name}_data1Noise_higher_prop.png')
     plt.close()
 
+    # Plot a 3D joint posterior for one simulated dataset, draw index 7
+    draw3d = 7
+    rand_draw = high_cog_sims[draw3d]
 
     nplots = 18
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 5].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_higher_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_higher_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 5].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_higher_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 3].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 0].squeeze(),
        ['Non-decision time', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([3, 0])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_ndt_higher_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 3].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Non-decision time', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([3, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_ndt_higher_prop.png")
 
     plot_posterior2d(param_samples[high_cog_sims[0:nplots], :, 2].squeeze(),
         param_samples[high_cog_sims[0:nplots], :, 1].squeeze(),
        ['Start point', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([2, 1])][high_cog_sims[0:nplots], :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black', highlight=draw3d)
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_start_higher_prop.png")
 
     appendix_text = rf"""
@@ -713,9 +798,6 @@ if make_recovery_plots:
 
     main_color = '#332288'
     secondary_color = '#ABB0B8'
-
-    # By default plot only one random posterior draws, draw 7
-    rand_draw = high_cog_sims[7]
 
     # Main 3D scatter plot
     ax.scatter(param_samples[rand_draw, :, 0].squeeze(),
@@ -1083,19 +1165,25 @@ if test_misspecification:
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_misspecified1.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_misspecified1.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_misspecified1.png")
 
     ############
@@ -1339,19 +1427,25 @@ if test_misspecification:
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_scaled1.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_scaled1.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_scaled1.png")
 
 
@@ -1568,19 +1662,25 @@ if test_misspecification:
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_scaled2.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_scaled2.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_scaled2.png")
 
     ############
@@ -1751,17 +1851,23 @@ if test_misspecification:
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Diffusion coefficient', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_fine.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
         param_samples[0:nplots, :, 1].squeeze(),
        ['Drift rate', 'Boundary'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_fine.png")
 
     plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
         param_samples[0:nplots, :, 0].squeeze(),
        ['Diffusion coefficient', 'Drift rate'],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color)
+       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
+       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
+       color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_fine.png")

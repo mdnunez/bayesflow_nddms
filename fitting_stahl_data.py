@@ -8,6 +8,7 @@
 # 22-Feb-2024     Michael D. Nunez    Use of single_trial_alpha_standard
 #              ***Scale data across participants and not within participants
 # 23-Feb-2024     Michael D. Nunez   Invert Pe/c to match results of Mattes et al. 2022
+# 07-March-2024   Michael D. Nunez     Increase figure size of proportion plot
 
 # Academic references:
 #
@@ -233,75 +234,109 @@ else:
 if not os.path.exists(plot_path):
     os.makedirs(plot_path)
 
+
+# Make tick labels for jellfish plots, note Python unpacking operator *
+tick_labels = np.array(['', *np.unique(base_df['subj_idx'])])
+tick_labels[np.mod(np.arange(0,90),10) != 9] = ''
+
+font_size = 16
+
 plt.figure()
 jellyfish(all_posteriors[:,:,0,None])
-plt.xlabel('Drift rate (evidence units / sec)')
-plt.ylabel('Participant')
+plt.xlabel('Drift rate (evidence units / sec)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_Drift_stahl_base.png')
 plt.close()
 
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,1,None])
-plt.xlabel('Boundary (evidence units)')
-plt.ylabel('Participant')
+plt.xlabel('Boundary (evidence units)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_Boundary_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,2,None])
-plt.xlabel('Relative Start Point (evidence units)')
-plt.ylabel('Participant')
+plt.xlabel('Relative Start Point (evidence units)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_StartPoint_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,3,None])
-plt.xlabel('Non-decision time (sec)')
-plt.ylabel('Participant')
+plt.xlabel('Non-decision time (sec)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_NDT_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,4,None])
-plt.xlabel('Boundary across-trial std (evidence units)')
-plt.ylabel('Participant')
+plt.xlabel('Boundary across-trial std (evidence units)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_BoundarySDT_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,5,None])
-plt.xlabel('Diffusion coefficient (evidence units)')
-plt.ylabel('Participant')
+plt.xlabel('Diffusion coefficient (evidence units)',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 plt.savefig(f'{plot_path}/{model_name}_DC_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,6,None])
 if fit_Pe:
-    plt.xlabel('Noise in Pe not related to boundary')
+    plt.xlabel('Noise in Pe not related to boundary',
+        fontsize=font_size)
 else:
-    plt.xlabel('Noise in Ne not related to boundary')
-plt.ylabel('Participant')
+    plt.xlabel('Noise in Ne not related to boundary',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 if fit_Pe:
     plt.savefig(f'{plot_path}/{model_name}_PeNoise_stahl_base.png')
 else:
     plt.savefig(f'{plot_path}/{model_name}_NeNoise_stahl_base.png')
 plt.close()
 
-plt.figure()
+plt.figure(figsize=(10,10))
 jellyfish(all_posteriors[:,:,7,None])
 if fit_Pe:
-    plt.xlabel('Proportion of Pe related to single-trial boundary')
+    plt.xlabel('Proportion of Pe related to single-trial boundary',
+        fontsize=font_size)
 else:
-    plt.xlabel('Proportion of Ne related to single-trial boundary')
-plt.ylabel('Participant')
+    plt.xlabel('Proportion of Ne related to single-trial boundary',
+        fontsize=font_size)
+plt.ylabel('Participant ID', fontsize=font_size)
+plt.yticks(plt.yticks()[0], tick_labels, fontsize=font_size) # Error
+plt.xticks(fontsize=font_size)
 if fit_Pe:
     plt.savefig(f'{plot_path}/{model_name}_PeProportion_stahl_base.png')
 else:
     plt.savefig(f'{plot_path}/{model_name}_NeProportion_stahl_base.png')
 plt.close()
 
+# MAKE 2D Plots
 print('Making 2D plots.')
 nplots = 18
 scatter_color = '#ABB0B8'
