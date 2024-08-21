@@ -22,7 +22,8 @@
 # ====         ================                       ======================
 # 25/09/23      Michael Nunez      Original code priors match basic_ddm_dc.py
 # 03/10/23      Michael Nunez                   Updates to work with Pystan 2
-# 13/03/24      Michael Nunez    Create empty directories if they do not exist          
+# 13/03/24      Michael Nunez    Create empty directories if they do not exist
+# 21/08/24      Michael Nunez       Fix bug in Stan code (see pull request)          
 
 
 # Online references
@@ -124,7 +125,7 @@ functions {
         if (Y >= 0) {
             return wiener_lpdf( fabs(Y) | boundary/dc, ter, bias, drift/dc );
         } else {
-            return wiener_lpdf( fabs(Y) | boundary, ter, 1-bias, -drift/dc );
+            return wiener_lpdf( fabs(Y) | boundary/dc, ter, 1-bias, -drift/dc );
         }
     }
 
