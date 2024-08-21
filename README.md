@@ -1,5 +1,5 @@
 # bayesflow_nddms
-#### (Repository version 0.7.0)
+#### (Repository version 0.7.1)
 Repository for fitting Drift-Diffusion models with identifiable within-trial noise parameters in Python using BayesFlow (and JAGS and Stan)
 
 **Authors: Michael D. Nunez from the Psychological Methods group at the University of Amsterdam**
