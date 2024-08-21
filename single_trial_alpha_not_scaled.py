@@ -16,6 +16,8 @@
 # 14-Feb-24     Michael Nunez          test_misspecification flag
 # 06-March-24   Michael Nunez  Generate 2d posterior plots with true values
 # 08-March-24   Michael Nunez  Generate 3D posterior for low external data correlation
+# 07-April-24   Michael Nunez   Add printing of cognitive variance proportions
+# 10-April-24   Michael Nunez   Enhance recovery plots of proportion cog. var.
 
 
 # References:
@@ -430,14 +432,17 @@ if make_recovery_plots:
     plt.savefig(f'{plot_path}/{model_name}_data1Noise.png')
     plt.close()
 
-
-    plt.figure()
+    font_size = 16
+    plt.figure(figsize=(10,10))
     recovery(data1_cognitive_prop_samples[0:500, :, None],
         true_data1_cognitive_prop[0:500])
     plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Proportion data1 variance related to cognition')
+    plt.xlabel('True proportion of external covariate variance explained by cognition', 
+        fontsize=font_size)
+    plt.ylabel('Posterior value', fontsize=font_size)
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    # plt.title('Proportion data1 variance related to cognition')
     plt.savefig(f'{plot_path}/{model_name}_data1prop_cog.png')
     plt.close()
 
@@ -1186,6 +1191,14 @@ if test_misspecification:
        color2='black')
     plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_misspecified1.png")
 
+    # Report the estimates of proportion of cognitive variance
+    prop_cog_var_means = np.mean(data1_cognitive_prop_samples, axis=1)
+    print(f'The mean r is {np.mean(prop_cog_var_means)}.')
+    print(f'The std of r is {np.std(prop_cog_var_means)}.')
+    print(f'The max r is {np.max(prop_cog_var_means)}')
+    print(f'The min r is {np.min(prop_cog_var_means)}')
+    print(f'The number of r > 0.2 is {np.sum(prop_cog_var_means > 0.2)}')
+
     ############
     # Fit model to alternative ground truth with a scalar on the boundary parameter
 
@@ -1646,14 +1659,17 @@ if test_misspecification:
     plt.savefig(f'{plot_path}/{model_name}_data1Noise_scaled2_focused.png')
     plt.close()
 
-
-    plt.figure()
+    font_size = 16
+    plt.figure(figsize=(10,10))
     recovery(data1_cognitive_prop_samples[0:500, :, None],
         true_data1_cognitive_prop[0:500])
     plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Proportion data1 variance related to cognition')
+    plt.xlabel('True proportion of external covariate variance explained by cognition', 
+        fontsize=font_size)
+    plt.ylabel('Posterior value', fontsize=font_size)
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    # plt.title('Proportion data1 variance related to cognition')
     plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_scaled2.png')
     plt.close()
 
