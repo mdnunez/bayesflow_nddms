@@ -20,7 +20,7 @@ functions {
         if (Y >= 0) {
             return wiener_lpdf( fabs(Y) | boundary/dc, ter, bias, drift/dc );
         } else {
-            return wiener_lpdf( fabs(Y) | boundary, ter, 1-bias, -drift/dc );
+            return wiener_lpdf( fabs(Y) | boundary/dc, ter, 1-bias, -drift/dc );
         }
     }
 
