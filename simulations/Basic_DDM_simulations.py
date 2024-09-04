@@ -2,12 +2,15 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 12-May-2023   Michael Nunez   Converted from course code Behavioural Research Toolbox 26-Sep-22
+# 12-May-2023   Michael Nunez   
+#             Converted from course code Behavioural Research Toolbox 26-Sep-22
 # 15-May-2023   Michael Nunez            Additions and subplots
 # 26-June-2023  Michael Nunez            Flag to plot the last row
+# 04-Sept-2024  Michael Nunez  
+#                   Reviewer comment: Stress test of different noise simulation
 
 extra_row = False
-
+alternative_calc = False
 
 # Load Modules
 import numpy as np
@@ -17,7 +20,8 @@ import matplotlib.pyplot as plt
 # Straight-forward DDM simulation
 def basic_diffusion(ntrials=200, nsteps=300, step_length=.01,
     boundary=1.2, drift=1.5, ndt=0.35, dc=1, fontsize = 16):
-    """Simulates a multiple trials from a diffusion model and plots the evidence path."""
+    """Simulates a multiple trials from a diffusion model and plots the 
+    evidence path."""
 
     rts = np.empty(ntrials)  # Simulated correct response times
     correct = np.empty(ntrials)
@@ -28,8 +32,10 @@ def basic_diffusion(ntrials=200, nsteps=300, step_length=.01,
     for n in range(ntrials):
         random_walk[0, n] = 0.5*boundary  # relative start point = 0.5
         for s in range(1,nsteps):
-            random_walk[s, n] = random_walk[s-1, n] + stats.norm.rvs(loc=drift*step_length, 
+            random_walk[s, n] = ( random_walk[s-1, n] 
+                + stats.norm.rvs(loc=drift*step_length, 
                 scale=dc*np.sqrt(step_length))
+                )
             if random_walk[s, n] >= boundary:
                 random_walk[s:, n] = boundary
                 rts[n] = s*step_length + ndt
@@ -49,7 +55,63 @@ def basic_diffusion(ntrials=200, nsteps=300, step_length=.01,
     plt.ylabel('Cognitive / Neural Evidence', fontsize=fontsize)
 
     plt.figure()
-    plt.hist((correct * 2 - 1) * rts, bins=20)  # Typical method of plotting choice-RTs
+    # Typical method of plotting choice-RTs
+    plt.hist((correct * 2 - 1) * rts, bins=20)  
+    plt.xlabel('Choice * Response Time (sec)', fontsize=fontsize)
+
+    print(f'Accuracy: {np.nanmean(correct)}')
+    print(f'Mean RT: {np.nanmean(rts)}')
+
+    print(f'Signal to Noise Ratio: {drift/dc}')
+    print(f'Criterion to Noise Ratio: {boundary/dc}')
+
+    plottime = time + ndt
+
+    return correct, rts, plottime, random_walk
+
+
+# Straight-forward DDM simulation with different noise generation to address 
+# reviewer comment
+def basic_diffusion_alt(ntrials=4, nsteps=300, step_length=.01,
+    boundary=1.2, drift=1.5, ndt=0.35, dc=1, fontsize = 16):
+    """Simulates a multiple trials from a diffusion model and plots the 
+    evidence path."""
+
+    rts = np.empty(ntrials)  # Simulated correct response times
+    correct = np.empty(ntrials)
+    plt.figure()
+    time = np.linspace(0, step_length*nsteps, num=nsteps)
+    random_walk = np.empty((nsteps, ntrials))
+    plottime = time + ndt
+    noise = np.random.normal(loc=0,scale=1,size=ntrials*nsteps)
+    for n in range(ntrials):
+        random_walk[0, n] = 0.5*boundary  # relative start point = 0.5
+        for s in range(1,nsteps):
+            random_walk[s, n] = ( random_walk[s-1, n]
+                + drift*step_length 
+                + dc*np.sqrt(step_length)*noise[(n*nsteps + (s-1))]
+                )
+            if random_walk[s, n] >= boundary:
+                random_walk[s:, n] = boundary
+                rts[n] = s*step_length + ndt
+                correct[n] = 1
+                break
+            elif random_walk[s, n] <= 0:
+                random_walk[s:, n] = 0
+                rts[n] = s*step_length + ndt
+                correct[n] = 0
+                break
+            elif s == (nsteps-1):
+                correct[n] = np.nan; rts[n] = np.nan
+                break
+        plt.plot(plottime, random_walk[:, n])
+    plt.xlim([0, 2])
+    plt.xlabel('Time (secs)', fontsize=fontsize)
+    plt.ylabel('Cognitive / Neural Evidence', fontsize=fontsize)
+
+    plt.figure()
+    # Typical method of plotting choice-RTs
+    plt.hist((correct * 2 - 1) * rts, bins=20)  
     plt.xlabel('Choice * Response Time (sec)', fontsize=fontsize)
 
     print(f'Accuracy: {np.nanmean(correct)}')
@@ -93,6 +155,9 @@ def ezdiff(rt,correct,s=1.0):
     print(f'EZ NDT estimate: {ndt}')
     return([drift,boundary,ndt])
 
+
+if alternative_calc:
+    basic_diffusion = basic_diffusion_alt
 
 # Make plots for diffusion with standard noise assumption
 np.random.seed(2023)
@@ -401,4 +466,7 @@ for i in range(rows):
 # Tight layout with no space between plots
 f.tight_layout(h_pad=0, w_pad=0)
 
-plt.savefig("basic_DDMdc_simulations.png", dpi=300)
+if alternative_calc:
+    plt.savefig("basic_DDMdc_simulations_alt.png", dpi=300)
+else:
+    plt.savefig("basic_DDMdc_simulations.png", dpi=300)
