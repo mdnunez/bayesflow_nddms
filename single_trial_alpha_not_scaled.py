@@ -18,6 +18,9 @@
 # 08-March-24   Michael Nunez  Generate 3D posterior for low external data correlation
 # 07-April-24   Michael Nunez   Add printing of cognitive variance proportions
 # 10-April-24   Michael Nunez   Enhance recovery plots of proportion cog. var.
+# 13-Nov-24     Michael Nunez      Robustness tests without true relationship
+# 21-Nov-24     Michael Nunez   Cleanup, compare sample correlations of behavioral/extdata
+# 22-Nov-24     Michael Nunez      Change draws from draw_prior_alt to only have large r
 
 
 # References:
@@ -49,6 +52,7 @@ view_simulation = False
 train_fitter = False
 make_recovery_plots = False
 test_misspecification = False
+test_norelationship = False
 
 
 # Get the filename of the currently running script
@@ -301,16 +305,26 @@ if make_recovery_plots:
     param_samples = np.empty((num_test, num_posterior_draws, num_params))
     true_params = np.empty((num_test, num_params))
     simulated_trial_nums = np.empty((num_test))
+    sample_corr = np.empty((num_test)) # Sample correlation between behavioral data and extdata
     np.random.seed(2023) # Set the random seed to generate the same plots every time
     for i in range(num_test):
         model_sims = configurator(generative_model(1))
         simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
         true_params[i, :] = model_sims['parameters']
         param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
+        absrt = np.abs(model_sims['summary_conditions'][0,:,0].squeeze())
+        dataext = model_sims['summary_conditions'][0,:,1].squeeze()
+        sample_corr[i] = np.corrcoef(absrt,dataext)[0, 1]
 
 
     print('For recovery plots, the mean number of simulated trials was %.0f +/- %.2f' %
         (np.mean(simulated_trial_nums), np.std(simulated_trial_nums)))
+
+    # True correlations in observed data
+    print(f'The mean true correlation is {np.mean(sample_corr)}.')
+    print(f'The std of true correlations is {np.std(sample_corr)}.')
+    print(f'The max true correlation is {np.max(sample_corr)}')
+    print(f'The min true correlation is {np.min(sample_corr)}')
 
 
     # BayesFlow native recovery plot, plot only up to 500 in each plot
@@ -511,6 +525,12 @@ if make_recovery_plots:
     print('%d of %d model simulations had cognitive proportions above %.2f' % 
         (high_cog_sims.size, num_test, cutoff_prop))
 
+    # True correlations in observed data
+    print(f'The mean true correlation is {np.mean(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The std of true correlations is {np.std(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The max true correlation is {np.max(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The min true correlation is {np.min(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+
     # Plot the results
     plt.figure()
     # Use None to add singleton dimension for recovery which expects multiple chains
@@ -655,6 +675,12 @@ if make_recovery_plots:
 
     print('%d of %d model simulations had cognitive proportions above %.2f' % 
         (high_cog_sims.size, num_test, cutoff_prop))
+
+    # True correlations in observed data
+    print(f'The mean true correlation is {np.mean(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The std of true correlations is {np.std(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The max true correlation is {np.max(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
+    print(f'The min true correlation is {np.min(sample_corr[high_cog_sims])} for r>{cutoff_prop}.')
 
     # Plot the results
     plt.figure()
@@ -846,8 +872,243 @@ if make_recovery_plots:
     """
     print(publication_text)
 
+
+def evaluate_misspecification(simulate_trials_function, missmodel,
+    prior_function=draw_prior):
+
+    # Connect via BayesFlow Wrappers for a ground truth model with a scalar
+    prior_missmodel = bf.simulation.Prior(prior_fun=prior_function)
+    # Same experimental context as the fitted model
+    simulator_missmodel = bf.simulation.Simulator(simulator_fun=simulate_trials_function, 
+        context_generator=experimental_context)
+    generative_model_missmodel = bf.simulation.GenerativeModel(prior_missmodel, simulator_missmodel)
+
+    # Need to test for different Ns, which is what the following code does
+    num_test = 500
+    num_posterior_draws = 10000
+
+    param_samples = np.empty((num_test, num_posterior_draws, num_params))
+    true_params = np.empty((num_test, num_params))
+    simulated_trial_nums = np.empty((num_test))
+    sample_var_extdata = np.empty((num_test))
+    sample_corr = np.empty((num_test)) # Sample correlation between behavioral data and extdata
+
+    np.random.seed(2023) # Set the random seed to generate the same plots every time
+    for i in range(num_test):
+        model_sims = configurator(generative_model_missmodel(1)) # Generate true data from the misspecified model
+        simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
+        sample_var_extdata[i] = np.var(model_sims['summary_conditions'][0,:,1].squeeze())
+        absrt = np.abs(model_sims['summary_conditions'][0,:,0].squeeze())
+        dataext = model_sims['summary_conditions'][0,:,1].squeeze()
+        sample_corr[i] = np.corrcoef(absrt,dataext)[0, 1]
+        true_params[i, :] = model_sims['parameters']
+        param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
+
+    # True correlations in observed data
+    print(f'The mean true correlation is {np.mean(sample_corr)}.')
+    print(f'The std of true correlations is {np.std(sample_corr)}.')
+    print(f'The max true correlation is {np.max(sample_corr)}')
+    print(f'The min true correlation is {np.min(sample_corr)}')
+    
+    # Posterior means
+    param_means = param_samples.mean(axis=1)
+
+    # Find the index of clearly good posterior means of tau (inside the prior range)
+    converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
+    print(f'{np.sum(converged)} of {converged.shape[0]} model fits were in the prior range for non-decision time when model is misspecified as {missmodel}')
+
+    # Plot true versus estimated for a subset of parameters when model is misspecified
+    recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
+                      param_means[:, np.array([0, 5, 1, 2, 3])][0:500, :],
+                      ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
+                      'Start Point', 'Non-Decision Time'],
+                      font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
+    plt.savefig(f"{plot_path}/{model_name}_recovery_short_{missmodel}.png")
+
+
+    # Calculate proportion of variance of external data explained by cognition
+    # var_eeg1 = std_alpha**2 + sigma1**2 in the fitted model
+    data1_cognitive_var_samples = param_samples[:, :, 4]**2
+
+    true_data1_cognitive_var = true_params[:, 4]**2
+
+    data1_total_var_samples = data1_cognitive_var_samples + param_samples[:, :, 6]**2
+
+    true_data1_total_var = true_data1_cognitive_var + true_params[:, 6]**2
+
+    data1_cognitive_prop_samples = data1_cognitive_var_samples / data1_total_var_samples
+
+    true_data1_cognitive_prop = true_data1_cognitive_var / true_data1_total_var
+
+    # Plot the results
+    plt.figure()
+    # Use None to add singleton dimension for recovery which expects multiple chains
+    recovery(param_samples[0:500, :, 0, None],
+        true_params[0:500, 0].squeeze())
+    plt.ylim(-5, 5)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Drift')
+    plt.savefig(f'{plot_path}/{model_name}_Drift_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 1, None],
+        true_params[0:500, 1].squeeze())
+    plt.ylim(0.0, 2.5)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Boundary')
+    plt.savefig(f'{plot_path}/{model_name}_Boundary_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 2, None],
+        true_params[0:500, 2].squeeze())
+    plt.ylim(0.0, 1.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Relative Start Point')
+    plt.savefig(f'{plot_path}/{model_name}_StartPoint_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 3, None],
+        true_params[0:500, 3].squeeze())
+    plt.ylim(0.0, 1.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Non-decision time')
+    plt.savefig(f'{plot_path}/{model_name}_NDT_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 4, None],
+        true_params[0:500, 4].squeeze())
+    plt.ylim(0.0, 2.5)
+    plt.xlabel('True std of boundary')
+    plt.ylabel('Posterior std of boundary')
+    plt.title('Trial-to-trial std in boundary')
+    plt.savefig(f'{plot_path}/{model_name}_boundary_std_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 5, None],
+        true_params[0:500, 5].squeeze())
+    plt.ylim(0.0, 2.5)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('Diffusion coefficient')
+    plt.savefig(f'{plot_path}/{model_name}_DC_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 6, None],
+        true_params[0:500, 6].squeeze())
+    plt.ylim(0.0, 6.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('data1 std not related to cognition')
+    plt.savefig(f'{plot_path}/{model_name}_data1Noise_{missmodel}.png')
+    plt.close()
+
+    plt.figure()
+    recovery(param_samples[0:500, :, 6, None],
+        true_params[0:500, 6].squeeze())
+    plt.ylim(0.0, 1.0)
+    plt.ylim(0.0, 3.0)
+    plt.xlabel('True')
+    plt.ylabel('Posterior')
+    plt.title('data1 std not related to cognition')
+    plt.savefig(f'{plot_path}/{model_name}_data1Noise_{missmodel}_focused.png')
+    plt.close()
+
+    font_size = 16
+    plt.figure(figsize=(10,10))
+    recovery(data1_cognitive_prop_samples[0:500, :, None],
+        true_data1_cognitive_prop[0:500])
+    plt.ylim(0.0, 1.0)
+    plt.xlabel('True proportion of external covariate variance explained by cognition', 
+        fontsize=font_size)
+    plt.ylabel('Posterior value', fontsize=font_size)
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    # plt.title('Proportion data1 variance related to cognition')
+    plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_{missmodel}.png')
+    plt.close()
+
+    acceptable_r = 0.2
+    prop_cog_var_means = np.mean(data1_cognitive_prop_samples,axis=1)
+    # Report the estimates of proportion of cognitive variance
+    print(f'Evaluation statistics for {missmodel} :')
+    print(f'The mean r is {np.mean(prop_cog_var_means)}.')
+    print(f'The std of r is {np.std(prop_cog_var_means)}.')
+    print(f'The max r is {np.max(prop_cog_var_means)}')
+    print(f'The min r is {np.min(prop_cog_var_means)}')
+    sum_large_r = np.sum(prop_cog_var_means > acceptable_r)
+    print(f'The number of r > {acceptable_r:.2} is {sum_large_r}')
+    print(f'The number of total simulations is {num_test}')
+    print(f'The percentage of believable models is {(sum_large_r/num_test)*100:.3}%')
+
+    # mean_estimated_total_var = np.mean(data1_total_var_samples,axis=1)
+    # total_overestimate = np.sum(mean_estimated_total_var > 2*sample_var_extdata)
+    # print(f'The number of total variance estimates 2*larger than sample variance is {total_overestimate}')
+    # total_believable_models = np.sum((mean_estimated_total_var <= 2*sample_var_extdata) & sum_large_r)
+    # print(f'The number of total believable models is {total_believable_models}')
+
+    # Posterior predictives of correlations
+    # corr_posterior_predictive = np.empty((num_test, num_posterior_draws))
+    # for i in range(num_test):
+    #     for s in range(num_posterior_draws):
+    #         data_samp = simulate_trials(param_samples[i, s,:].squeeze(),
+    #          int(simulated_trial_nums[i]))
+    #         corr_posterior_predictive[i, s] = np.corrcoef(data_samp.T)[0, 1]
+    # mean_corr = np.mean(corr_posterior_predictive,axis=1)
+    # print(f'The mean predicted correlation is {np.mean(mean_corr)}.')
+    # print(f'The std of predicted correlations is {np.std(mean_corr)}.')
+    # print(f'The max predicted correlation is {np.max(mean_corr)}')
+    # print(f'The min predicted correlation is {np.min(mean_corr)}')
+
+
+
+
 if test_misspecification:
-    # Simulate a normal parameter space without measurement noise in EEG
+
+
+    #### Use misspecification tests when simulating from the correct model with high correlations
+
+    def draw_prior_large_r():
+        # drift ~ N(0, 2.0), drift rate, index 0
+        drift = RNG.normal(0.0, 2.0)
+
+        # mu_alpha ~ N(1.0, 0.5) in [0, 10], mean boundary, index 1
+        mu_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # beta ~ Beta(2.0, 2.0), relative start point, index 2
+        beta = RNG.beta(2.0, 2.0)
+
+        # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time, index 3
+        ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
+
+        # std_alpha ~ N(1.0, 0.5) in [0, 3], trial-to-trial std in boundary, index 4
+        std_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+
+        #dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient, index 5
+        dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # r ~ U(0.75, 1.0), proportion of cognitive variance in extdata1
+        r = RNG.uniform(0.75, 1.0)
+
+        #sigma1, measurement noise of extdata1, index 6
+        sigma1 = std_alpha*np.sqrt( (1-r) / r)
+
+        p_samples = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, sigma1))
+        return p_samples
+
+    evaluate_misspecification(simulate_trials, 'high_alt', draw_prior_large_r)
+
+
+    # Simulate a normal parameter space without much measurement noise in EEG
 
     # drift rate - index 0
     drift = 3
@@ -916,8 +1177,11 @@ if test_misspecification:
         #mu_dc ~ N(1.0, 0.5) in [0, 10], mean diffusion coefficient, index 5
         mu_dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
 
-        # sigma1 ~ U(0.0, 5.0),measurement noise of extdata1, index 6
-        sigma1 = RNG.uniform(0.0, 5.0)
+        # r ~ U(0.75, 1.0), proportion of cognitive variance in extdata1
+        r = RNG.uniform(0.75, 1.0)
+
+        #sigma1, measurement noise of extdata1, index 6
+        sigma1 = std_dc*np.sqrt( (1-r) / r)
 
         p_samples = np.hstack((drift, alpha, beta, ter, std_dc, mu_dc, sigma1))
         return p_samples
@@ -1012,192 +1276,7 @@ if test_misspecification:
     plt.savefig(f"{plot_path}/{model_name}_optimal_test_case_misspecified1.png")
     print(f'The posterior means are {np.mean(post_samples,axis=0)}')
 
-
-    # Connect via BayesFlow Wrappers for an alternative ground truth model
-    prior_alt = bf.simulation.Prior(prior_fun=draw_prior_alt)
-    # Same experimental context as the fitted model
-    simulator_alt = bf.simulation.Simulator(simulator_fun=simulate_trials_alt, 
-        context_generator=experimental_context)
-    generative_model_alt = bf.simulation.GenerativeModel(prior_alt, simulator_alt)
-
-    # Need to test for different Ns, which is what the following code does
-    num_test = 500
-    num_posterior_draws = 10000
-
-    param_samples = np.empty((num_test, num_posterior_draws, num_params))
-    true_params = np.empty((num_test, num_params))
-    simulated_trial_nums = np.empty((num_test))
-
-
-
-    np.random.seed(2023) # Set the random seed to generate the same plots every time
-    for i in range(num_test):
-        model_sims = configurator(generative_model_alt(1)) # Generate true data from the alternative model
-        simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
-        true_params[i, :] = model_sims['parameters']
-        param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
-
-
-
-    # Posterior means
-    param_means = param_samples.mean(axis=1)
-
-    # Find the index of clearly good posterior means of tau (inside the prior range)
-    converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
-    print('%d of %d model fits were in the prior range for non-decision time when model is misspecified' % 
-        (np.sum(converged), converged.shape[0]))
-
-    # Plot true versus estimated for a subset of parameters when model is misspecified
-    recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
-                      param_means[:, np.array([0, 5, 1, 2, 3])][0:500, :],
-                      ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
-                      'Start Point', 'Non-Decision Time'],
-                      font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
-    plt.savefig(f"{plot_path}/{model_name}_recovery_short_misspecified1.png")
-
-    # Calculate proportion of variance of external data explained by cognition
-    # var_eeg1 = std_alpha**2 + sigma1**2 in the fitted model
-    # var_eeg1 = std_varsigma**2 + sigma1**2 in the simulated data
-    data1_cognitive_var_samples = param_samples[:, :, 4]**2
-
-    true_data1_cognitive_var = true_params[:, 4]**2
-
-    data1_total_var_samples = data1_cognitive_var_samples + param_samples[:, :, 6]**2
-
-    true_data1_total_var = true_data1_cognitive_var + true_params[:, 6]**2
-
-    data1_cognitive_prop_samples = data1_cognitive_var_samples / data1_total_var_samples
-
-    true_data1_cognitive_prop = true_data1_cognitive_var / true_data1_total_var
-
-    # Plot the results
-    plt.figure()
-    # Use None to add singleton dimension for recovery which expects multiple chains
-    recovery(param_samples[0:500, :, 0, None],
-        true_params[0:500, 0].squeeze())
-    plt.ylim(-5, 5)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Drift')
-    plt.savefig(f'{plot_path}/{model_name}_Drift_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 1, None],
-        true_params[0:500, 1].squeeze())
-    plt.ylim(0.0, 2.5)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Boundary')
-    plt.savefig(f'{plot_path}/{model_name}_Boundary_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 2, None],
-        true_params[0:500, 2].squeeze())
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Relative Start Point')
-    plt.savefig(f'{plot_path}/{model_name}_StartPoint_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 3, None],
-        true_params[0:500, 3].squeeze())
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Non-decision time')
-    plt.savefig(f'{plot_path}/{model_name}_NDT_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 4, None],
-        true_params[0:500, 4].squeeze())
-    plt.ylim(0.0, 2.5)
-    plt.xlabel('True std of diffusion coefficient')
-    plt.ylabel('Posterior std of boundary')
-    plt.title('Trial-to-trial std in boundary/dc')
-    plt.savefig(f'{plot_path}/{model_name}_boundary_std_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 5, None],
-        true_params[0:500, 5].squeeze())
-    #plt.ylim(0.0, 2.5)
-    plt.ylim(0.0, 4.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Diffusion coefficient')
-    plt.savefig(f'{plot_path}/{model_name}_DC_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 6, None],
-        true_params[0:500, 6].squeeze())
-    plt.ylim(0.0, 6.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('data1 std not related to cognition')
-    plt.savefig(f'{plot_path}/{model_name}_data1Noise_misspecified1.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 6, None],
-        true_params[0:500, 6].squeeze())
-    plt.ylim(0.0, 1.0)
-    plt.ylim(0.0, 3.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('data1 std not related to cognition')
-    plt.savefig(f'{plot_path}/{model_name}_data1Noise_misspecified1_focused.png')
-    plt.close()
-
-
-    plt.figure()
-    recovery(data1_cognitive_prop_samples[0:500, :, None],
-        true_data1_cognitive_prop[0:500])
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Proportion data1 variance related to cognition')
-    plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_misspecified1.png')
-    plt.close()
-
-    nplots = 18
-    scatter_color = '#ABB0B8'
-    plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
-        param_samples[0:nplots, :, 1].squeeze(),
-       ['Diffusion coefficient', 'Boundary'],
-       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_misspecified1.png")
-
-    plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
-        param_samples[0:nplots, :, 1].squeeze(),
-       ['Drift rate', 'Boundary'],
-       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_misspecified1.png")
-
-    plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
-        param_samples[0:nplots, :, 0].squeeze(),
-       ['Diffusion coefficient', 'Drift rate'],
-       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_misspecified1.png")
-
-    # Report the estimates of proportion of cognitive variance
-    prop_cog_var_means = np.mean(data1_cognitive_prop_samples, axis=1)
-    print(f'The mean r is {np.mean(prop_cog_var_means)}.')
-    print(f'The std of r is {np.std(prop_cog_var_means)}.')
-    print(f'The max r is {np.max(prop_cog_var_means)}')
-    print(f'The min r is {np.min(prop_cog_var_means)}')
-    print(f'The number of r > 0.2 is {np.sum(prop_cog_var_means > 0.2)}')
+    evaluate_misspecification(simulate_trials_alt, 'misspecified1', draw_prior_alt)
 
     ############
     # Fit model to alternative ground truth with a scalar on the boundary parameter
@@ -1703,9 +1782,9 @@ if test_misspecification:
     # Test parameter recovery of a smaller evidence accumulation step size
     # As a reference see Brown et al. (2006) Evaluating methods for approximating stochastic differential equations
 
-    # Connect via BayesFlow Wrappers
-    prior = bf.simulation.Prior(prior_fun=draw_prior)
-    experimental_context = bf.simulation.ContextGenerator(non_batchable_context_fun=prior_N)
+    # # Connect via BayesFlow Wrappers
+    # prior = bf.simulation.Prior(prior_fun=draw_prior)
+    # experimental_context = bf.simulation.ContextGenerator(non_batchable_context_fun=prior_N)
 
     @njit
     def simulate_trials_fine(params, n_trials):
@@ -1722,168 +1801,241 @@ if test_misspecification:
         return sim_data
 
 
+    evaluate_misspecification(simulate_trials_fine, 'fine')   
+
+    ############
+    # Fit model to alternative ground truth with a sigmoidal relationship
+
+    def draw_prior_large_r():
+        # drift ~ N(0, 2.0), drift rate, index 0
+        drift = RNG.normal(0.0, 2.0)
+
+        # mu_alpha ~ N(1.0, 0.5) in [0, 10], mean boundary, index 1
+        mu_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # beta ~ Beta(2.0, 2.0), relative start point, index 2
+        beta = RNG.beta(2.0, 2.0)
+
+        # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time, index 3
+        ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
+
+        # std_alpha ~ N(1.0, 0.5) in [0, 3], trial-to-trial std in boundary, index 4
+        std_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+
+        #dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient, index 5
+        dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # r ~ U(0.75, 1.0), proportion of cognitive variance in extdata1
+        r = RNG.uniform(0.75, 1.0)
+
+        #sigma1, measurement noise of extdata1, index 6
+        sigma1 = std_alpha*np.sqrt( (1-r) / r)
+
+        p_samples = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, sigma1))
+        return p_samples
+
+    @njit
+    def diffusion_trial_sigmoid(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
+        dt=.01, max_steps=400.):
+        """Simulates a trial from the diffusion model."""
+
+        # trial-to-trial boundary
+        while True:
+            bound_trial = mu_alpha + std_alpha * np.random.normal()
+            if bound_trial>0:
+                break
+
+        n_steps = 0.
+        evidence = bound_trial * beta
+     
+        # Simulate a single DM path
+        while ((evidence > 0) and (evidence < bound_trial) and (n_steps < max_steps)):
+
+            # DDM equation
+            evidence += drift*dt + np.sqrt(dt) * dc * np.random.normal()
+
+            # Increment step
+            n_steps += 1.0
+
+        rt = n_steps * dt
+
+     
+        # Observe scaled measures with noise
+        extdata1 = 0.6/(1+np.exp(-32*(bound_trial-1))) + 0.8 + np.random.normal(0, sigma1)
+
+        if evidence >= bound_trial:
+            choicert =  ter + rt  
+        elif evidence <= 0:
+            choicert = -ter - rt
+        else:
+            choicert = 0  # This indicates a missing response
+        return choicert, extdata1
+
+    @njit
+    def simulate_trials_sigmoid(params, n_trials):
+        """Simulates a diffusion process for trials ."""
+
+        drift, mu_alpha, beta, ter, std_alpha, dc, sigma1= params
+        choicert = np.empty(n_trials)
+        z1 = np.empty(n_trials)
+        for i in range(n_trials):
+            choicert[i], z1[i] = diffusion_trial_sigmoid(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1)
+       
+        sim_data = np.stack((choicert, z1), axis=-1)
+        return sim_data
 
 
-    simulator_fine = bf.simulation.Simulator(simulator_fun=simulate_trials_fine, 
-        context_generator=experimental_context)
-    generative_model_fine = bf.simulation.GenerativeModel(prior, simulator_fine)
+    evaluate_misspecification(simulate_trials_sigmoid, 'sigmoid', draw_prior_large_r)
 
 
-    # Need to test for different Ns, which is what the following code does
-    num_test = 500
-    num_posterior_draws = 10000
-    num_params = draw_prior().shape[0]
+if test_norelationship:
+    ############
+    # Fit model to alternative ground truth with no relationship to any parameter
 
 
-    param_samples = np.empty((num_test, num_posterior_draws, num_params))
-    true_params = np.empty((num_test, num_params))
-    simulated_trial_nums = np.empty((num_test))
+    # num_params = draw_prior().shape[0]
+
+    def draw_prior_large_r():
+        # drift ~ N(0, 2.0), drift rate, index 0
+        drift = RNG.normal(0.0, 2.0)
+
+        # mu_alpha ~ N(1.0, 0.5) in [0, 10], mean boundary, index 1
+        mu_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # beta ~ Beta(2.0, 2.0), relative start point, index 2
+        beta = RNG.beta(2.0, 2.0)
+
+        # ter ~ N(0.5, 0.25) in [0, 1.5], non-decision time, index 3
+        ter = truncnorm_better(mean=0.5, sd=0.25, low=0.0, upp=1.5)[0]
+
+        # std_alpha ~ N(1.0, 0.5) in [0, 3], trial-to-trial std in boundary, index 4
+        std_alpha = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=3)[0]
+
+        #dc ~ N(1.0, 0.5) in [0, 10], diffusion coefficient, index 5
+        dc = truncnorm_better(mean=1.0, sd=0.5, low=0.0, upp=10)[0]
+
+        # r ~ U(0.75, 1.0), proportion of cognitive variance in extdata1
+        r = RNG.uniform(0.75, 1.0)
+
+        #sigma1, measurement noise of extdata1, index 6
+        sigma1 = std_alpha*np.sqrt( (1-r) / r)
+
+        p_samples = np.hstack((drift, mu_alpha, beta, ter, std_alpha, dc, sigma1))
+        return p_samples
+
+    @njit
+    def diffusion_trial_norel(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
+        dt=.01, max_steps=400.):
+        """Simulates a trial from the diffusion model."""
+
+        # trial-to-trial boundary
+        while True:
+            bound_trial = mu_alpha + std_alpha * np.random.normal()
+            if bound_trial>0:
+                break
+
+        n_steps = 0.
+        evidence = bound_trial * beta
+     
+        # Simulate a single DM path
+        while ((evidence > 0) and (evidence < bound_trial) and (n_steps < max_steps)):
+
+            # DDM equation
+            evidence += drift*dt + np.sqrt(dt) * dc * np.random.normal()
+
+            # Increment step
+            n_steps += 1.0
+
+        rt = n_steps * dt
+
+     
+        # Observe external data that is completely unrelated to behavioural data
+        extdata1 = np.random.normal(1, sigma1)
+
+        if evidence >= bound_trial:
+            choicert =  ter + rt  
+        elif evidence <= 0:
+            choicert = -ter - rt
+        else:
+            choicert = 0  # This indicates a missing response
+        return choicert, extdata1
+
+    @njit
+    def simulate_trials_norel(params, n_trials):
+        """Simulates a diffusion process for trials ."""
+
+        drift, mu_alpha, beta, ter, std_alpha, dc, sigma1= params
+        choicert = np.empty(n_trials)
+        z1 = np.empty(n_trials)
+        for i in range(n_trials):
+            choicert[i], z1[i] = diffusion_trial_norel(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1)
+       
+        sim_data = np.stack((choicert, z1), axis=-1)
+        return sim_data
+
+    evaluate_misspecification(simulate_trials_norel, 'norel', draw_prior_large_r)
+
+    ############
+    # Fit model to alternative ground truth with no relationship to any parameter
+    # Uniform distribution
 
 
-    np.random.seed(2023) # Set the random seed to generate the same plots every time
-    for i in range(num_test):
-        model_sims = configurator(generative_model_fine(1)) # Generate true data from the alternative model
-        simulated_trial_nums[i] = model_sims['summary_conditions'].shape[1]
-        true_params[i, :] = model_sims['parameters']
-        param_samples[i, :, :] = amortizer.sample(model_sims, n_samples=num_posterior_draws)
+    # num_params = draw_prior().shape[0]
 
+    @njit
+    def diffusion_trial_norelunif(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1,
+        dt=.01, max_steps=400.):
+        """Simulates a trial from the diffusion model."""
 
-    # Posterior means
-    param_means = param_samples.mean(axis=1)
+        # trial-to-trial boundary
+        while True:
+            bound_trial = mu_alpha + std_alpha * np.random.normal()
+            if bound_trial>0:
+                break
 
-    # Find the index of clearly good posterior means of tau (inside the prior range)
-    converged = (param_means[:, 3] > 0) & (param_means[:, 3] < 1)
-    print('%d of %d model fits were in the prior range for non-decision time when the simulator has smaller time resolution' % 
-        (np.sum(converged), converged.shape[0]))
+        n_steps = 0.
+        evidence = bound_trial * beta
+     
+        # Simulate a single DM path
+        while ((evidence > 0) and (evidence < bound_trial) and (n_steps < max_steps)):
 
-    # Plot true versus estimated for a subset of parameters when model is misspecified
-    recovery_scatter(true_params[:, np.array([0, 5, 1, 2, 3])][0:500, :],
-                      param_means[:, np.array([0, 5, 1, 2, 3])][0:500, :],
-                      ['Drift Rate', 'Diffusion Coefficient', 'Boundary',
-                      'Start Point', 'Non-Decision Time'],
-                      font_size=16, color='#3182bdff', alpha=0.75, grantB1=False)
-    plt.savefig(f"{plot_path}/{model_name}_recovery_short_fine.png")
+            # DDM equation
+            evidence += drift*dt + np.sqrt(dt) * dc * np.random.normal()
 
-    # Calculate proportion of variance of external data explained by cognition
-    # var_eeg1 = std_alpha**2 + sigma1**2 in the fitted model
-    # var_eeg1 = std_varsigma**2 + sigma1**2 in the simulated data
-    data1_cognitive_var_samples = param_samples[:, :, 4]**2
+            # Increment step
+            n_steps += 1.0
 
-    true_data1_cognitive_var = true_params[:, 4]**2
+        rt = n_steps * dt
 
-    data1_total_var_samples = data1_cognitive_var_samples + param_samples[:, :, 6]**2
+     
+        # Observe external data that is completely unrelated to behavioural data
+        # Using the uniform distribution
+        # midpoint = 0.5*(low+high)
+        # sigma^2 = (1/12)*(high-low)^2
+        midpoint = 1
+        high = (0.5)*np.sqrt(12)*sigma1 + midpoint
+        low = 2*midpoint - high
+        extdata1 = np.random.uniform(low=low, high=high)
 
-    true_data1_total_var = true_data1_cognitive_var + true_params[:, 6]**2
+        if evidence >= bound_trial:
+            choicert =  ter + rt  
+        elif evidence <= 0:
+            choicert = -ter - rt
+        else:
+            choicert = 0  # This indicates a missing response
+        return choicert, extdata1
 
-    data1_cognitive_prop_samples = data1_cognitive_var_samples / data1_total_var_samples
+    @njit
+    def simulate_trials_norelunif(params, n_trials):
+        """Simulates a diffusion process for trials ."""
 
-    true_data1_cognitive_prop = true_data1_cognitive_var / true_data1_total_var
+        drift, mu_alpha, beta, ter, std_alpha, dc, sigma1= params
+        choicert = np.empty(n_trials)
+        z1 = np.empty(n_trials)
+        for i in range(n_trials):
+            choicert[i], z1[i] = diffusion_trial_norelunif(drift, mu_alpha, beta, ter, std_alpha, dc, sigma1)
+       
+        sim_data = np.stack((choicert, z1), axis=-1)
+        return sim_data
 
-    # Plot the results
-    plt.figure()
-    # Use None to add singleton dimension for recovery which expects multiple chains
-    recovery(param_samples[0:500, :, 0, None],
-        true_params[0:500, 0].squeeze())
-    plt.ylim(-5, 5)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Drift')
-    plt.savefig(f'{plot_path}/{model_name}_Drift_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 1, None],
-        true_params[0:500, 1].squeeze())
-    plt.ylim(0.0, 2.5)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Boundary')
-    plt.savefig(f'{plot_path}/{model_name}_Boundary_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 2, None],
-        true_params[0:500, 2].squeeze())
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Relative Start Point')
-    plt.savefig(f'{plot_path}/{model_name}_StartPoint_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 3, None],
-        true_params[0:500, 3].squeeze())
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Non-decision time')
-    plt.savefig(f'{plot_path}/{model_name}_NDT_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 4, None],
-        true_params[0:500, 4].squeeze())
-    plt.ylim(0.0, 2.5)
-    plt.xlabel('True std of diffusion coefficient')
-    plt.ylabel('Posterior std of boundary')
-    plt.title('Trial-to-trial std in boundary/dc')
-    plt.savefig(f'{plot_path}/{model_name}_boundary_std_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 5, None],
-        true_params[0:500, 5].squeeze())
-    #plt.ylim(0.0, 2.5)
-    plt.ylim(0.0, 4.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Diffusion coefficient')
-    plt.savefig(f'{plot_path}/{model_name}_DC_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(param_samples[0:500, :, 6, None],
-        true_params[0:500, 6].squeeze())
-    plt.ylim(0.0, 6.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('data1 std not related to cognition')
-    plt.savefig(f'{plot_path}/{model_name}_data1Noise_fine.png')
-    plt.close()
-
-    plt.figure()
-    recovery(data1_cognitive_prop_samples[0:500, :, None],
-        true_data1_cognitive_prop[0:500])
-    plt.ylim(0.0, 1.0)
-    plt.xlabel('True')
-    plt.ylabel('Posterior')
-    plt.title('Proportion data1 variance related to cognition')
-    plt.savefig(f'{plot_path}/{model_name}_data1prop_cog_fine.png')
-    plt.close()
-
-    nplots = 18
-    scatter_color = '#ABB0B8'
-    plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
-        param_samples[0:nplots, :, 1].squeeze(),
-       ['Diffusion coefficient', 'Boundary'],
-       true_params=true_params[:, np.array([5, 1])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_dc_fine.png")
-
-    plot_posterior2d(param_samples[0:nplots, :, 0].squeeze(),
-        param_samples[0:nplots, :, 1].squeeze(),
-       ['Drift rate', 'Boundary'],
-       true_params=true_params[:, np.array([0, 1])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_boundary_drift_fine.png")
-
-    plot_posterior2d(param_samples[0:nplots, :, 5].squeeze(),
-        param_samples[0:nplots, :, 0].squeeze(),
-       ['Diffusion coefficient', 'Drift rate'],
-       true_params=true_params[:, np.array([5, 0])][0:nplots, :],
-       font_size=16, alpha=0.25, figsize=(20,8), color=scatter_color,
-       color2='black')
-    plt.savefig(f"{plot_path}/{model_name}_2d_posteriors_drift_dc_fine.png")
+    evaluate_misspecification(simulate_trials_norelunif, 'norelunif', draw_prior_large_r)

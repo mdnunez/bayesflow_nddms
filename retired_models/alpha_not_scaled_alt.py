@@ -1,5 +1,5 @@
-# alpha_not_scaled.py - Testing JAGS fits of a non-hierarchical DDM model with
-#                              external data predicted by boundary in Python 3
+# alpha_not_scaled_alt.py - Testing JAGS fits of a non-hierarchical DDM model with
+#                           external data predicted by boundary in Python 3
 #
 # Copyright (C) 2024 Michael D. Nunez, <m.d.nunez@uva.nl>
 #
@@ -20,18 +20,9 @@
 #
 # Date            Programmers                         Descriptions of Change
 # ====         ================                       ======================
-# 06/10/23      Michael Nunez                            Original code
-# 09/10/23      Michael Nunez         Fixed sigma to be standard deviation
-# 10/10/23      Michael Nunez  Do not output all posterior distribution plots
-# 11/03/24      Michael Nunez  Updated plots from pyhddmjagsutils, fix draw across tests
-# 13/03/24      Michael Nunez    Create empty directories if they do not exist
-# 11/11/24      Michael Nunez  Robustness test when true relationship is sigmoidal
-# 12/11/24      Michael Nunez  Robustness test 2 without true relationship
-# 13/11/24      Michael Nunez   Compare sample variance of external data to sigma estimate
-# 21/11/24      Michael Nunez   Compare sample correlations of behavioral/extdata
+# UNFINISHED      Michael Nunez             Converted from alpha_not_scaled.py
 
 # MODULES
-import sys
 import numpy as np
 import pyjags
 import scipy.io as sio
@@ -41,10 +32,7 @@ import pyhddmjagsutils as phju
 
 # FLAGS
 
-if len(sys.argv) != 2:
-    test_num = 1
-else:
-    test_num = int(sys.argv[1])
+test_num = 1
 print(f'Obtaining model fits for test {test_num}...')
 
 # SIMULATE MODEL
@@ -57,7 +45,7 @@ if not os.path.exists(data_path):
 # Generate samples from the joint-model of reaction time and choice
 # Note you could remove this if statement and replace with loading your own data to dictionary "gendata"
 
-if not os.path.exists(f'data/alpha_not_scaled_test{test_num}.mat'):
+if not os.path.exists(f'data/alpha_not_scaled_alt_test{test_num}.mat'):
     print(f'Generated simulated data for test {test_num}...')
     # Number of simulated participants
     nparts = 100
@@ -80,13 +68,13 @@ if not os.path.exists(f'data/alpha_not_scaled_test{test_num}.mat'):
     deltatrialsd = np.random.uniform(0, 2, size=nparts)  # Uniform from 0 to 2 evidence units per second
     if (test_num == 1):
         sigma = .5 # Test 1, high measurement noise compared to standard deviation of boundaries
-    elif ((test_num == 2) | (test_num == 5)):
+    elif (test_num == 2):
         sigma = .1 # Test 2, low measurement noise compared to standard deviation of boundaries
     elif (test_num == 3):
         sigma = .01 # Test 3, very low measurement noise compared to standard deviation of boundaries
-    elif ((test_num == 4) | (test_num == 6)):
+    elif (test_num == 4):
         sigma = .2 # Test 4, simulate no connection to external covariate
-        # Note this exactly matches the total variance of test 2: sigma = sqrt(0.03 + (0.1)^2)
+        # Note this exactly matches the total variance of test 2: sqrt(0.03 + 0.01)
     # # Fix parameters across simulations
     ndt[17] = .4
     alpha[17] = 1.2
@@ -98,7 +86,6 @@ if not os.path.exists(f'data/alpha_not_scaled_test{test_num}.mat'):
     rt = np.zeros(N)
     acc = np.zeros(N)
     extdata = np.zeros(nparts)  # External data measured per participant
-    mean_rt = np.zeros(nparts)
     participant = np.zeros(N)  # Participant index
     indextrack = np.arange(ntrials)
     for p in range(nparts):
@@ -109,22 +96,9 @@ if not os.path.exists(f'data/alpha_not_scaled_test{test_num}.mat'):
         y[indextrack] = tempx * tempt
         rt[indextrack] = tempt
         acc[indextrack] = (tempx + 1) / 2
-        mean_rt[p] = np.mean(tempt)
-        if test_num == 6:
-            # Note this exactly matches the total variance of test 2: (1/12)*(high-low)^2 = 0.04
-            extdata[p] = np.random.uniform(low=0.75, high=(0.75 + np.sqrt(0.48)))
-            sigma = np.nan
-        elif test_num == 5:
-            extdata[p] = 0.6/(1+np.exp(-32*(alpha[p]-1.1))) + 0.8 + np.random.normal(0, sigma)
-        elif test_num != 4:
-            extdata[p] = np.random.normal(loc=1*alpha[p], scale=sigma)
-        else:
-            extdata[p] = np.random.normal(loc=1, scale=sigma)
+        extdata[p] = np.random.normal(loc=gamma*alpha[p]-1, scale=1)
         participant[indextrack] = p + 1
         indextrack += ntrials
-
-    sample_corr = np.corrcoef(mean_rt,extdata)[0, 1]
-    print(f'The correlation between mean RT and external data is {sample_corr:.3f}.')
 
     genparam = dict()
     genparam['ndt'] = ndt
@@ -446,22 +420,19 @@ plt.savefig(f"{plot_path}/{model_name}_3d_posterior_drift_boundary_dc.png", dpi=
 plt.close()
 
 sigma = np.squeeze(genparam['sigma'])
-stdextdata = np.std(extdata)
 publication_text = rf"""
 Draws from a joint posterior distribution for one simulated data set from a DDM with all three 
 parameters free to vary (purple 3D scatter plot) with external data described by the boundary. Paired joint distributions are given by the grey projections
 on each of the three faces. The joint posterior distribution is driven mostly by the joint likelihood
-of the data (N={int(ntrials)}) given the model (Model dcDDM-$\alpha$) with true measurement noise of external data $\sigma={(sigma):.2}$.
-The prior distributions (though not influential) for Model dcDDM-$\alpha$ are given in the text. 
-The posterior shape will be different for each data set (see Figure for paired posterior distributions). 
-The true 5-dimension joint posterior distribution also includes the relative start point 
-and non-decision time. The mean posteriors of those two parameters were 
+of the data (N={int(ntrials)}) given the model (Model dcDDM-$\alpha$) with measurement noise of external data $\sigma={(sigma):.2}$. The prior distributions 
+(though not influential) for Model dcDDM-$\alpha$ are given in the text. The posterior shape will be different for each data set 
+(see Figure for paired posterior distributions). The true 5-dimension joint posterior distribution also includes the 
+relative start point and non-decision time. The mean posteriors of those two parameters were 
 $\hat\tau={(diags['ndt']['mean'][rand_draw]):.3}$ seconds and $\hat\beta={(diags['beta']['mean'][rand_draw]):.2f}$ 
 proportion of boundary in this simulation respectively. The drift rate $\delta$ and diffusion coefficients $\varsigma$ are in are 
 evidence units per second while the boundary $\alpha$ is in evidence units. The true parameters were 
 $\delta={(true_params[rand_draw,0]):.2f}$, $\varsigma={(true_params[rand_draw,1]):.2f}$, $\alpha={(true_params[rand_draw,2]):.2f}$, 
-$\beta={(true_params[rand_draw,3]):.2f}$, and $\tau={(true_params[rand_draw,4]):.3}$. The estimate of the measurement noise was
-$\hat\sigma={(diags['sigma']['mean'][0]):.2f}$ while the sample standard deviation of the external data was $s={(stdextdata):.2f}$.
+$\beta={(true_params[rand_draw,3]):.2f}$, and $\tau={(true_params[rand_draw,4]):.3}$.
 """
 print(publication_text)
 

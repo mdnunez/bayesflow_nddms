@@ -4,6 +4,7 @@
 # ====            ================              ======================
 # 22-Feb-2024     Michael D. Nunez        Converted from imputation_from_stahl
 # 23-Feb-2024     Michael D. Nunez   Add option to randomly shift true extdata 
+# 22-Nov-2024     Michael D. Nunez   Output correlations of RT to external data
 
 # Academic references:
 #
@@ -41,7 +42,7 @@ from single_trial_alpha_not_scaled import (
 model_name = 'single_trial_alpha_not_scaled'
 
 # Impute with simualated true boundaries
-force_differences = False
+force_differences = True
 
 # Explore the data
 explore = False
@@ -231,12 +232,16 @@ input_data = np.column_stack((imputed_choicert,alpha_like_Pe))
 # Fit the model per participant and keep track of posterior distributions
 num_posterior_draws = 1000
 all_posteriors = np.ones((nsubs, num_posterior_draws, 8))*np.nan
+nparts = np.unique(base_df['subj_idx']).shape[0]
+RT_extdata_corrs = np.empty((nparts))
 part_track = 0
 for part in np.unique(base_df['subj_idx']):
     these_trials = (base_df['subj_idx'] == part)
     print(f'Fitting participant {part}.')
     n_trials = np.sum(these_trials)
     sub_data = input_data[these_trials,]
+    RT_extdata_corrs[part_track] = np.corrcoef(np.abs(sub_data[:, 0]),sub_data[:, 1])[0,1]
+    print(f'The correlation in participant {part} is {RT_extdata_corrs[part_track]:.3}.')
     obs_dict = {'sim_data': sub_data[np.newaxis,:,:], 
     'sim_non_batchable_context': n_trials, 'prior_draws': None}
 
@@ -248,6 +253,13 @@ for part in np.unique(base_df['subj_idx']):
 
     all_posteriors[part_track, :, 0:7] = post_samples
     part_track += 1
+
+
+# Evaluate correlations in real data
+print(f'The mean correlation is {np.mean(RT_extdata_corrs):.3f}.')
+print(f'The std correlations is {np.std(RT_extdata_corrs):.3f}.')
+print(f'The max correlation is {np.max(RT_extdata_corrs):.3f}')
+print(f'The min correlation is {np.min(RT_extdata_corrs):.3f}')
 
 # Calculate percentage of cognitive variance explained
 data1_cognitive_var_samples = all_posteriors[:, :, 4]**2
