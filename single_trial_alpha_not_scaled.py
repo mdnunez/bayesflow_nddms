@@ -21,6 +21,7 @@
 # 13-Nov-24     Michael Nunez      Robustness tests without true relationship
 # 21-Nov-24     Michael Nunez   Cleanup, compare sample correlations of behavioral/extdata
 # 22-Nov-24     Michael Nunez      Change draws from draw_prior_alt to only have large r
+# 02-Dec-24     Michael Nunez  Addition of simulate_trials_alt_neg() for inverted true dc relationship
 
 
 # References:
@@ -1237,6 +1238,19 @@ if test_misspecification:
         sim_data = np.stack((choicert, z1), axis=-1)
         return sim_data
 
+    @njit
+    def simulate_trials_alt_neg(params, n_trials):
+        """Simulates a diffusion process for trials ."""
+
+        drift, alpha, beta, ter, std_dc, mu_dc, sigma1 = params
+        choicert = np.empty(n_trials)
+        z1 = np.empty(n_trials)
+        for i in range(n_trials):
+            choicert[i], z1[i] = diffusion_trial_alt(drift, alpha, beta, ter, std_dc, mu_dc, sigma1)
+       
+        sim_data = np.stack((choicert, -z1), axis=-1)
+        return sim_data
+
 
     # drift rate - index 0
     drift = 3
@@ -1277,6 +1291,7 @@ if test_misspecification:
     print(f'The posterior means are {np.mean(post_samples,axis=0)}')
 
     evaluate_misspecification(simulate_trials_alt, 'misspecified1', draw_prior_alt)
+    evaluate_misspecification(simulate_trials_alt_neg, 'misspecified1_neg', draw_prior_alt)
 
     ############
     # Fit model to alternative ground truth with a scalar on the boundary parameter
