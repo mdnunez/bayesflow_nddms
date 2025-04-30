@@ -1,11 +1,11 @@
 # bayesflow_nddms
-#### (Repository version 0.8.0)
+#### (Repository version 0.8.1)
 Repository for fitting Drift-Diffusion models with identifiable within-trial noise parameters in Python using BayesFlow (and JAGS and Stan)
 
 **Authors: Michael D. Nunez from the Psychological Methods group at the University of Amsterdam**
 
 ### Citation
-Nunez, M. D., Schubert, A.-L., Frischkorn, G. T., & Oberauer, K. (2024). [Cognitive models of decision-making with identifiable parameters: Diffusion Decision Models with within-trial noise](https://psyarxiv.com/h4fde) PsyArXiv. https://doi.org/10.31234/osf.io/h4fde
+Nunez, M. D., Schubert, A.-L., Frischkorn, G. T., & Oberauer, K. (2025). [Cognitive models of decision-making with identifiable parameters: Diffusion Decision Models with within-trial noise](https://www.sciencedirect.com/science/article/pii/S0022249625000185) Journal of Mathematical Psychology. https://doi.org/10.1016/j.jmp.2025.102917
 
 ### Prerequisites
 
